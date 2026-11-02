@@ -1,0 +1,11 @@
+services:
+  tests:
+    build: .
+    env_file: .env
+    environment:
+      TEST_DATABASE_URL: postgresql+psycopg://hamro:${POSTGRES_PASSWORD}@db:5432/hamro_test
+      COOKIE_SECURE: '0'
+    command: [python, -m, pytest, -q]
+    depends_on:
+      db:
+        condition: service_healthy

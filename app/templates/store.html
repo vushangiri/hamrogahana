@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import card with context %}
+{% block title %}{{ store.name }} · Hamro Gahana{% endblock %}
+{% block content %}
+<a class="textBtn" href="/stores">← Stores</a><h1>{{ store.name }}</h1>
+<div class="panel"><span class="status good">Verified</span><p>{{ store.address }}</p><a class="textBtn" href="tel:{{ store.phone }}">Call {{ store.phone }}</a><p class="small muted">Store surplus: {{ store.surplus|npr }}/g</p></div>
+<h2>All jewellery</h2>
+<form method="get" class="panel" role="search">
+<label for="storeSearch">Search this store</label><input class="field" id="storeSearch" name="q" value="{{ request.args.get('q','') }}" placeholder="Name, description, category or tag">
+<label for="storeSort">Sort by</label><select class="field" id="storeSort" name="sort">{% for value,label in [('new','Newest'),('low','Price: low to high'),('high','Price: high to low')] %}<option value="{{ value }}" {{ 'selected' if request.args.get('sort','new')==value }}>{{ label }}</option>{% endfor %}</select>
+<button class="btn space">Search jewellery</button><a class="textBtn" href="/stores/{{ store.id }}">Clear</a>
+</form>
+<div class="grid">{% for p,price,distance in rows %}{{ card(p,price,distance) }}{% else %}<div class="empty">No matching jewellery in this store.</div>{% endfor %}</div>
+<div class="between sectionHead">{% if page>1 %}<a class="ghost" href="{{ url_for('web.store',sid=store.id, **dict(request.args,page=page-1)) }}">← Previous</a>{% endif %}{% if more %}<a class="ghost" href="{{ url_for('web.store',sid=store.id, **dict(request.args,page=page+1)) }}">More pieces →</a>{% endif %}</div>
+<div class="realMap" id="storesMap" data-tile-url="{{ tile_url }}"></div><div class="storeMarker hidden" data-lat="{{ store.latitude }}" data-lon="{{ store.longitude }}">{{ store.name }}</div>
+{% endblock %}

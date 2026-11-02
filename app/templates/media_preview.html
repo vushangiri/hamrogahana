@@ -1,0 +1,3 @@
+{% extends 'base.html' %}
+{% block title %}Media preview · Hamro Gahana{% endblock %}
+{% block content %}<button class="ghost" type="button" data-back>← Back</button><h1>Media preview</h1><div class="mediaViewer">{% if media.kind=='reel' %}<video src="/media/{{ media.id }}/file" controls controlslist="nodownload" playsinline preload="metadata" aria-label="Reel preview"></video>{% else %}<img src="/media/{{ media.id }}/file" alt="{{ media.product.name if media.product else 'Evidence preview' }}">{% endif %}</div>{% endblock %}
