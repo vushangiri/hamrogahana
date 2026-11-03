@@ -107,3 +107,11 @@ Install the PWA from the production HTTPS origin. Android: use Chrome's **Instal
 Authenticated users have a notification inbox at `/notifications`, with an unread count and per-message read actions. Admins receive new-store and upgrade-request notifications. Merchants receive store status, product moderation, subscription and upgrade-review updates. Notifications are account-specific and persist from the time of this update; they are in-app messages, not operating-system push notifications.
 
 Merchants can set optional public email and WhatsApp numbers in Workspace → Store. Public store pages offer call, SMS, optional WhatsApp/email, and map directions.
+
+## Passwords and manual recovery
+
+Passwords must contain 6–128 characters, including administrator passwords created through the CLI. Users select **Forgot password?** on sign-in and submit their full name, store name, registered phone number (username), and address. Repeated submissions for the same normalized phone number create only one pending request; the original details remain available for review.
+
+Admins receive an inbox notification and can open **Administration → Password reset requests** to compare submitted and registered details, then reject or approve. Approval replaces the account password with a randomly generated 10-character password shown once to the reviewing admin. The admin must copy it and manually text it to the account's registered phone number. No SMS is sent automatically, and plaintext passwords are never stored in notifications, sessions, or audit history. If the admin leaves without copying, a new request and approval is needed. Rejection leaves the existing password intact. A new request can be submitted after an earlier one is reviewed.
+
+Apply the latest database migration before running this version (`docker compose build`, then `docker compose run --rm app python -m flask --app wsgi db upgrade`, then `docker compose up -d`).

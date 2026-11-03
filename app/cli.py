@@ -61,9 +61,9 @@ def register_cli(app):
     @click.option("--phone-number", prompt=True)
     @click.option("--name", prompt=True)
     def create_admin(phone_number, name):
-        password = getpass.getpass("Password (12+ characters): ")
-        if len(password) < 12 or len(password) > 128:
-            raise click.ClickException("Use 12–128 characters")
+        password = getpass.getpass("Password (6+ characters): ")
+        if len(password) < 6 or len(password) > 128:
+            raise click.ClickException("Use 6–128 characters")
         if password != getpass.getpass("Confirm password: "):
             raise click.ClickException("Passwords differ")
         db.session.add(

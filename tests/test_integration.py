@@ -406,3 +406,51 @@ def test_product_lists_use_ten_item_pages(database):
     auth(client, database.config['TEST_OWNER_ID'])
     overview = client.get('/merchant').data
     assert b'23/80' in overview
+
+
+@pytest.mark.parametrize("tab", ["Stores", "Products"])
+def test_admin_list_search_and_pagination(database, tab):
+    import re
+    from html import unescape
+
+    if tab == "Stores":
+        for i in range(12):
+            owner = User(name=f"Owner {i}", phone=f"+97798100000{i:02}", password_hash="unused")
+            db.session.add(owner)
+            db.session.flush()
+            db.session.add(Store(owner_id=owner.id, name=f"Searchable Store {i}",
+                phone=owner.phone, address=f"District {i}", latitude=D("27.704"),
+                longitude=D("85.311"), location="SRID=4326;POINT(85.311 27.704)",
+                verification="pending", plan_name="Free"))
+    else:
+        for i in range(12):
+            p = product(database, "archived")
+            p.name = f"Searchable Ring {i}"
+            p.description = f"Special craft {i}"
+            p.search_text = f"searchable ring tag{i}"
+    db.session.commit()
+    c = database.test_client()
+    auth(c, database.config["TEST_ADMIN_ID"])
+    response = c.get("/admin", query_string={"tab":tab,"q":"SEARCHABLE"})
+    assert response.status_code == 200
+    assert 'name="tab" value="'+tab+'"' in response.text
+    next_url = unescape(re.search(r'data-infinite-next="admin-list" href="([^"]+)"', response.text).group(1))
+    assert "q=SEARCHABLE" in next_url and "page=2" in next_url
+    second = c.get(next_url)
+    pattern = r'<h3><a href="/admin/(?:stores|products)/[^\"]+">([^<]+)</a></h3>'
+    first_names = set(re.findall(pattern, response.text))
+    second_names = set(re.findall(pattern, second.text))
+    assert len(first_names) == 10 and len(second_names) == 2
+    assert first_names.isdisjoint(second_names)
+    assert 'data-infinite-next="admin-list"' not in second.text
+    assert f"No matching {tab.lower()}." in c.get("/admin", query_string={"tab":tab,"q":"nonexistent"}).text
+    # SQL wildcard characters should be matched literally.
+    assert f"No matching {tab.lower()}." in c.get("/admin", query_string={"tab":tab,"q":"%_"}).text
+    if tab == "Stores":
+        assert "Searchable Store 11" in c.get("/admin?tab=Stores&q=Owner+11").text
+        assert "Searchable Store 11" in c.get("/admin?tab=Stores&q=District+11").text
+        assert "Searchable Store 11" in c.get("/admin?tab=Stores&q=9810000011").text
+    else:
+        assert "Searchable Ring 11" in c.get("/admin?tab=Products&q=Special+craft+11").text
+        assert "Searchable Ring 11" in c.get("/admin?tab=Products&q=tag11").text
+        assert "Searchable Ring" in c.get("/admin?tab=Products&q=Test+Jeweller").text

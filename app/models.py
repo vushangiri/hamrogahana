@@ -218,3 +218,18 @@ class Mutation(db.Model):
     actor_id = db.Column(db.Uuid, db.ForeignKey("user.id"), nullable=False)
     path = db.Column(db.String(200), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now)
+
+
+class PasswordReset(Base):
+    phone = db.Column(db.String(20), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    store_name = db.Column(db.String(150), nullable=False)
+    address = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.String(16), nullable=False, default="pending")
+    reviewed_at = db.Column(db.DateTime(timezone=True))
+    reviewer_id = db.Column(db.Uuid, db.ForeignKey("user.id"))
+    __table_args__ = (
+        CheckConstraint("status IN ('pending','approved','rejected')"),
+        Index("ix_password_reset_pending_phone", "phone", unique=True,
+              postgresql_where=db.text("status = 'pending'")),
+    )

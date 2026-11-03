@@ -227,8 +227,8 @@ def register():
     if request.method == "POST":
         throttle("register:" + request.remote_addr, 5, 3600)
         password = request.form.get("password", "")
-        if not 12 <= len(password) <= 128:
-            raise ValueError("Use a password of 12–128 characters")
+        if not 6 <= len(password) <= 128:
+            raise ValueError("Use a password of 6–128 characters")
         lat, lon = coordinates(request.form.get("latitude"), request.form.get("longitude"))
         u = User(
             phone=phone(request.form.get("phone", "")),
@@ -412,3 +412,25 @@ def read_notification(nid):
     item.read_at = item.read_at or now()
     db.session.commit()
     return redirect("/notifications")
+
+
+@web.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    from .models import Notification, PasswordReset
+
+    if request.method == "POST":
+        throttle("reset-ip:" + request.remote_addr, 10, 3600)
+        number = phone(request.form.get("phone", ""))
+        values = dict(phone=number, name=text(request.form.get("name"), 120),
+                      store_name=text(request.form.get("store_name"), 150),
+                      address=text(request.form.get("address"), 500))
+        # The partial unique index also deduplicates simultaneous submissions.
+        created = db.session.scalar(insert(PasswordReset).values(**values)
+            .on_conflict_do_nothing(index_elements=["phone"], index_where=PasswordReset.status == "pending")
+            .returning(PasswordReset.id))
+        if created:
+            for uid in db.session.scalars(select(User.id).where(User.role == "admin")):
+                db.session.add(Notification(user_id=uid, message="A password reset is awaiting manual verification.", href="/admin/password-resets"))
+        db.session.commit()
+        return render_template("forgot_password.html", submitted=True)
+    return render_template("forgot_password.html", submitted=False)
