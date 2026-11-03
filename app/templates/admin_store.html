@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+{% from 'macros.html' import infinite_next with context %}{% extends 'base.html' %}
 {% from 'macros.html' import badge,preview with context %}
 {% block title %}{{ store.name }} · Administration{% endblock %}
 {% block content %}
@@ -10,6 +10,5 @@
 <div class="panel"><h2 id="evidence">Documents & payment evidence</h2>{% for m in media %}<div class="item"><p>{{ m.kind|title }} · {{ m.created_at }} · {{ badge(m.status) }}</p>{% if m.output %}{% if m.output.endswith('.upload') %}<a class="ghost" href="/media/{{ m.id }}/file">Download PDF</a>{% else %}{{ preview(m,'Preview evidence') }}{% endif %}{% endif %}{% if m.error %}<p>{{ m.error }}</p>{% endif %}</div>{% else %}<p>No evidence uploaded.</p>{% endfor %}</div>
 <div class="panel"><h2>Subscription requests</h2>{% for u in upgrades %}<p>{{ u.created_at }} · {{ u.plan_name }} · {{ badge(u.status) }}</p>{% else %}<p>No requests.</p>{% endfor %}</div>
 <h2>Products · all statuses</h2><form method="get" role="search" class="panel"><label for="productSearch">Search products</label><input class="field" id="productSearch" name="q" value="{{ request.args.get('q','') }}"><button class="btn space">Search</button><a class="textBtn" href="/admin/stores/{{ store.id }}">Clear</a></form>
-{% for p in products %}<div class="panel"><h3><a href="/admin/products/{{ p.id }}">{{ p.name }}</a></h3>{{ badge(p.status) }}<p>{{ p.metal }} · {{ (p.purity*100)|round(2) }}% · {{ p.weight.normalize() }} g</p></div>{% else %}<div class="empty">No matching products.</div>{% endfor %}
-<div class="between sectionHead">{% if page>1 %}<a class="ghost" href="{{ url_for('admin.store_detail',sid=store.id, **dict(request.args,page=page-1)) }}">← Previous</a>{% endif %}{% if more %}<a class="ghost" href="{{ url_for('admin.store_detail',sid=store.id, **dict(request.args,page=page+1)) }}">More products →</a>{% endif %}</div>
-{% endblock %}
+<div id="product-list">{% for p in products %}<div class="panel"><h3><a href="/admin/products/{{ p.id }}">{{ p.name }}</a></h3>{{ badge(p.status) }}<p>{{ p.metal }} · {{ (p.purity*100)|round(2) }}% · {{ '{:f}'.format(p.weight.normalize()) }} g</p></div>{% else %}<div class="empty">No matching products.</div>{% endfor %}
+</div>{{ infinite_next(more,page,'product-list') }}{% endblock %}

@@ -31,7 +31,7 @@ docker compose run --rm app python -m flask --app wsgi create-admin
 docker compose up -d
 ```
 
-`seed` prompts for initial pure gold and silver rates; these are operator-supplied values, not downloaded market data. `create-admin` prompts for phone/name and a password twice. There are no default login credentials. Open http://localhost:8080 . Register a merchant at `/register`, then use `/admin/login` to verify it. Create a product, upload an image, publish it and inspect it publicly. Upgrade requests need payment evidence and admin review. Free stores have no reel or featured entitlement.
+`seed` prompts for initial pure gold and silver rates; these are operator-supplied values, not downloaded market data. `create-admin` prompts for phone/name and a password twice. There are no default login credentials. Open http://localhost:8082 . Register a merchant at `/register`, then use `/admin/login` to verify it. Create a product, upload an image, publish it and inspect it publicly. Upgrade requests need payment evidence and admin review. Free stores have no reel or featured entitlement.
 
 ## Store browsing and media
 
@@ -58,7 +58,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-The suite targets http://localhost:8080 by default, at 390×844 and 360×800. To target a staging HTTPS host, set BASE_URL in your shell (`$env:BASE_URL='https://your-domain'` in PowerShell; `export BASE_URL=https://your-domain` on Ubuntu). The supplied browser suite covers public navigation, theme persistence, manual location, access gates and PWA assets. Use `docs/ACCEPTANCE.md` for the remaining authenticated/browser/device checks; they are not implied by that small suite.
+The suite targets http://localhost:8082 by default, at 390×844 and 360×800. To target a staging HTTPS host, set BASE_URL in your shell (`$env:BASE_URL='https://your-domain'` in PowerShell; `export BASE_URL=https://your-domain` on Ubuntu). The supplied browser suite covers public navigation, theme persistence, manual location, access gates and PWA assets. Use `docs/ACCEPTANCE.md` for the remaining authenticated/browser/device checks; they are not implied by that small suite.
 
 ## Python development without Docker
 
@@ -84,4 +84,26 @@ Run `python -m flask --app wsgi worker` in a second terminal. Without the worker
 
 ## Production and maintenance
 
+The app now uses **127.0.0.1:8082** by default, leaving ports 8080 and 8081 available for your other apps. Set `APP_PORT` in `.env` to change it. For **hamrogahana.com**, follow the [VPS domain and HTTPS setup](docs/DEPLOYMENT.md); the ready-to-install host Nginx configuration is [deploy/hamrogahana.com.conf](deploy/hamrogahana.com.conf).
+
 See `docs/DEPLOYMENT.md` for Ubuntu HTTPS, storage, backup/restore and troubleshooting. See `docs/ARCHITECTURE.md` for service boundaries, quota/ranking policies, maps and extension guidance. `docs/ENDPOINTS.md` lists routes. `docs/schema.sql` is the frozen initial DDL; migrations are authoritative. `docs/IMPLEMENTATION_PLAN.md` maps requirements to components.
+
+## Daily rates, installation and notifications
+
+Run the new migration before starting the updated app:
+
+```sh
+docker compose build app worker rates
+docker compose run --rm app python -m flask --app wsgi db upgrade
+docker compose up -d app worker rates
+```
+
+The `rates` service checks FENEGOSIDA every minute during 10:45–11:15 Asia/Kathmandu. It imports once per Nepal calendar day, retrying unavailable, incomplete or stale responses throughout that window. Keep this service running independently of media processing. Outside Docker, run `python -m flask --app wsgi rate-scheduler`. A stopped scheduler does not catch up outside the window; existing rates remain available. Errors are recorded in scheduler logs.
+
+FENEGOSIDA's `todayBaseRatePerGram` field contains the labelled unit total. We retain the 10-gram and tola totals, and divide the 10-gram total by ten for internal pricing. The feed's `todayDate` supplies the effective Nepal date. Manual admin publications take effect immediately with today's Nepal date and clear the imported unit totals. A later daily import can replace a manual publication; a later manual publication replaces the import. A manual publication made during an HTTP fetch wins over that fetch. Repeated checks after a successful import do not overwrite subsequent manual changes. Public rates and product estimates show the effective date and source; failed imports leave both unchanged.
+
+Install the PWA from the production HTTPS origin. Android: use Chrome's **Install app** prompt/menu, rather than creating a browser shortcut. iPhone: Share → Add to Home Screen, keeping **Open as Web App** enabled where offered. Existing shortcuts may need to be removed and the app reinstalled. Standalone metadata cannot force a browser to create a WebAPK or remove its shortcut badge. The top banner offers the browser's installation prompt where supported and platform instructions otherwise. Installed launches hide the banner; browsers cannot reliably detect or launch an installed iPhone PWA, so the banner directs users to its home screen icon.
+
+Authenticated users have a notification inbox at `/notifications`, with an unread count and per-message read actions. Admins receive new-store and upgrade-request notifications. Merchants receive store status, product moderation, subscription and upgrade-review updates. Notifications are account-specific and persist from the time of this update; they are in-app messages, not operating-system push notifications.
+
+Merchants can set optional public email and WhatsApp numbers in Workspace → Store. Public store pages offer call, SMS, optional WhatsApp/email, and map directions.

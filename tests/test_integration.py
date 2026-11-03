@@ -265,11 +265,11 @@ def test_store_catalogue_search_pagination_and_visibility(database):
     c = database.test_client()
     url = f"/stores/{p.store_id}"
     first = c.get(url)
-    assert first.status_code == 200 and b"More pieces" in first.data
+    assert first.status_code == 200 and b'data-infinite-next="product-list"' in first.data
     assert b"Private draft" not in first.data
     second = c.get(url + "?page=2&sort=new")
-    assert second.status_code == 200 and b"Previous" in second.data
-    assert b"More pieces" not in second.data
+    assert second.status_code == 200 and b"Previous" not in second.data
+    assert b"data-infinite-next" not in second.data
     match = c.get(url + "?q=unique13&lat=-80&lon=-170&radius=.1")
     assert b"Ring 13" in match.data and b"Ring 12" not in match.data
     assert b"No matching jewellery" in c.get(url + "?q=absent").data
@@ -365,3 +365,44 @@ def test_uploaded_reel_worker_and_inline_playback(database, tmp_path):
     assert response.mimetype == "video/mp4"
     assert response.headers["Content-Disposition"].startswith("inline")
     assert guest.get(f"/media/{media.id}/thumb").mimetype == "image/webp"
+
+
+def test_product_lists_use_ten_item_pages(database):
+    import re
+
+    pieces = [product(database) for _ in range(23)]
+    for i, piece in enumerate(pieces):
+        piece.name = f"Pagination piece {i:02}"
+        piece.search_text = piece.name.lower()
+        db.session.add(Media(
+            product_id=piece.id, store_id=piece.store_id,
+            kind="reel", status="ready", source=f"pagination-{i}.mp4",
+        ))
+    db.session.commit()
+    client = database.test_client()
+    sid = database.config['TEST_STORE_ID']
+    ids = ','.join(str(piece.id) for piece in pieces)
+    routes = ['/?q=Pagination', f'/stores/{sid}?q=Pagination', f'/saved?ids={ids}', '/reels?view=all']
+    for role, uid, paths in [
+        (None, None, routes),
+        ('merchant', database.config['TEST_OWNER_ID'],
+         ['/merchant?tab=Products', '/merchant?tab=Media', '/merchant?tab=Featured']),
+        ('admin', database.config['TEST_ADMIN_ID'],
+         ['/admin?tab=Products', f'/admin/stores/{sid}?q=Pagination']),
+    ]:
+        if role:
+            auth(client, uid)
+        for path in paths:
+            seen = set()
+            for page, count in [(1, 10), (2, 10), (3, 3)]:
+                response = client.get(path + f'&page={page}', headers={'HX-Request': 'true'})
+                assert response.status_code == 200
+                names = set(re.findall(rb'Pagination piece \d{2}', response.data))
+                assert len(names) == count, (path, page, names)
+                assert not seen.intersection(names)
+                seen.update(names)
+                assert (b'data-infinite-next' in response.data) == (page < 3)
+            assert len(seen) == 23
+    auth(client, database.config['TEST_OWNER_ID'])
+    overview = client.get('/merchant').data
+    assert b'23/80' in overview

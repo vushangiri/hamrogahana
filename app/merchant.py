@@ -41,20 +41,35 @@ def dashboard():
     tab = request.args.get("tab", "Overview")
     if tab not in ("Overview", "Products", "Media", "Featured", "Store", "Subscription"):
         abort(404)
+    page = max(1, min(10000, int(request.args.get("page", 1))))
+    base = select(Product).where(Product.store_id == s.id)
+    product_count = db.session.scalar(select(func.count()).select_from(base.subquery()))
+    published_count = db.session.scalar(
+        select(func.count()).select_from(base.where(Product.status == "published").subquery())
+    )
+    if tab == "Featured":
+        base = base.where(Product.status == "published")
     products = db.session.scalars(
-        select(Product).where(Product.store_id == s.id).order_by(Product.created_at, Product.id)
-    ).all()
+        base.order_by(Product.created_at, Product.id).limit(11).offset((page - 1) * 10)
+    ).all() if tab in ("Products", "Media", "Featured") else []
+    feature_page = max(1, min(10000, int(request.args.get("feature_page", 1))))
+    features = db.session.scalars(
+        select(Feature).where(Feature.store_id == s.id)
+        .order_by(Feature.start.desc(), Feature.id)
+        .limit(11).offset((feature_page - 1) * 10)
+    ).all() if tab == "Featured" else []
     return render_template(
         "merchant.html",
         store=s,
-        products=products,
+        products=products[:10],
+        more=len(products) > 10,
+        page=page,
+        product_count=product_count,
+        published_count=published_count,
         tab=tab,
-        features=db.session.scalars(
-            select(Feature)
-            .where(Feature.store_id == s.id)
-            .order_by(Feature.start.desc())
-            .limit(100)
-        ).all(),
+        features=features[:10],
+        feature_more=len(features) > 10,
+        feature_page=feature_page,
         upgrades=db.session.scalars(
             select(Upgrade)
             .where(Upgrade.store_id == s.id)
@@ -206,6 +221,10 @@ def profile():
     lat, lon = coordinates(request.form.get("latitude"), request.form.get("longitude"))
     s.name = text(request.form.get("name"))
     s.phone = phone(request.form.get("phone", ""))
+    s.email = text(request.form.get("email"), 254, False) or None
+    if s.email and ("@" not in s.email or any(c.isspace() for c in s.email)):
+        raise ValueError("Enter a valid store email")
+    s.whatsapp = phone(request.form["whatsapp"]) if request.form.get("whatsapp", "").strip() else None
     s.address = text(request.form.get("address"), 500)
     s.latitude, s.longitude, s.location = lat, lon, f"SRID=4326;POINT({lon} {lat})"
     s.surplus = decimal(request.form.get("surplus"), places=4)

@@ -56,6 +56,8 @@ def product_context(p):
 @web.get("/")
 def discover():
     rows, more, page = catalogue(request.args)
+    if request.headers.get("HX-Request"):
+        return render_template("catalogue.html", rows=rows, more=more, page=page)
     features = db.session.scalars(
         select(Feature)
         .join(Product)
@@ -165,11 +167,11 @@ def reels():
         .where(*public_conditions(), Media.kind == "reel", Media.status == "ready")
         .options(joinedload(Media.product).joinedload(Product.store))
         .order_by(Media.created_at.desc(), Media.id)
-        .limit(6)
-        .offset((page - 1) * 5)
+        .limit(11)
+        .offset((page - 1) * 10)
     ).all()
     return render_template(
-        "reels.html", reels=rows[:5], more=len(rows) > 5, page=page, active="reels"
+        "reels.html", reels=rows[:10], more=len(rows) > 10, page=page, active="reels"
     )
 
 
@@ -346,13 +348,16 @@ def geocode():
 
 @web.get("/manifest.webmanifest")
 def manifest():
-    return jsonify(
+    response = jsonify(
         name="Hamro Gahana",
         short_name="Gahana",
         id="/",
         start_url="/",
         scope="/",
         display="standalone",
+        description="Discover jewellery and local jewellers in Nepal",
+        lang="en",
+        prefer_related_applications=False,
         background_color="#f7f5f0",
         theme_color="#865b30",
         icons=[
@@ -365,6 +370,9 @@ def manifest():
             for size in (192, 512)
         ],
     )
+
+    response.mimetype = "application/manifest+json"
+    return response
 
 
 @web.get("/sw.js")
@@ -381,3 +389,26 @@ def offline():
 def health():
     db.session.execute(select(func.PostGIS_Version()))
     return jsonify(status="ok", version="1.0.0")
+
+
+@web.get("/notifications")
+@login_required
+def notifications():
+    from .models import Notification
+
+    page = max(1, min(10000, int(request.args.get("page", 1))))
+    items = db.session.scalars(select(Notification).where(Notification.user_id == current_user.id).order_by(Notification.created_at.desc(), Notification.id).limit(21).offset((page - 1) * 20)).all()
+    return render_template("notifications.html", items=items[:20], more=len(items) > 20, page=page)
+
+
+@web.post("/notifications/<uuid:nid>/read")
+@login_required
+def read_notification(nid):
+    from .models import Notification
+
+    item = db.get_or_404(Notification, nid)
+    if item.user_id != current_user.id:
+        abort(404)
+    item.read_at = item.read_at or now()
+    db.session.commit()
+    return redirect("/notifications")

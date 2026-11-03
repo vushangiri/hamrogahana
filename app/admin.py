@@ -29,10 +29,10 @@ def store_detail(sid):
         term = "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         query = query.where(Product.search_text.ilike(term, escape="\\"))
     products = db.session.scalars(
-        query.order_by(Product.created_at.desc(), Product.id).limit(51).offset((page - 1) * 50)
+        query.order_by(Product.created_at.desc(), Product.id).limit(11).offset((page - 1) * 10)
     ).all()
     return render_template(
-        "admin_store.html", store=s, products=products[:50], more=len(products) > 50, page=page,
+        "admin_store.html", store=s, products=products[:10], more=len(products) > 10, page=page,
         media=db.session.scalars(
             select(Media).where(Media.store_id == sid, Media.kind.in_(["document", "payment"]))
             .order_by(Media.created_at.desc(), Media.id)
@@ -86,12 +86,12 @@ def dashboard():
         q = q.where(Media.kind == "reel")
     if hasattr(model, "created_at"):
         q = q.order_by(model.created_at.desc(), model.id)
-    records = db.session.scalars(q.limit(51).offset((page - 1) * 50)).all()
+    records = db.session.scalars(q.limit(11).offset((page - 1) * 10)).all()
     return render_template(
         "admin.html",
         tab=tab,
-        records=records[:50],
-        more=len(records) > 50,
+        records=records[:10],
+        more=len(records) > 10,
         page=page,
         upgrades=db.session.scalars(
             select(Upgrade)
@@ -185,6 +185,10 @@ def rates():
         value = decimal(request.form.get(metal), ".0001", places=4)
         audit("rate.changed", metal, previous=rate.value, new=value, reason=reason)
         rate.value, rate.updated_at = value, now()
+        from .services.core import NEPAL
+        rate.effective_date = rate.updated_at.astimezone(NEPAL).date()
+        rate.source = "manual"
+        rate.per_ten_grams = rate.per_tola = None
     db.session.commit()
     return redirect("/admin?tab=Rates")
 

@@ -23,7 +23,7 @@ def price_expression():
     )
 
 
-def catalogue(args, page_size=12, store_id=None):
+def catalogue(args, page_size=10, store_id=None):
     filters = list(public_conditions())
     if store_id is None:
         lat, lon = coordinates(args.get("lat", "27.704"), args.get("lon", "85.311"))

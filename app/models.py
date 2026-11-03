@@ -43,6 +43,8 @@ class Store(Base):
     owner = db.relationship(User)
     name = db.Column(db.String(150), nullable=False)
     phone = db.Column(db.String(20), nullable=False)
+    email = db.Column(db.String(254))
+    whatsapp = db.Column(db.String(20))
     address = db.Column(db.String(500), nullable=False)
     latitude = db.Column(db.Numeric(10, 7), nullable=False)
     longitude = db.Column(db.Numeric(10, 7), nullable=False)
@@ -74,8 +76,24 @@ class Tag(Base):
     name = db.Column(db.String(60), nullable=False, unique=True)
 
 
+class Notification(Base):
+    user_id = db.Column(db.Uuid, db.ForeignKey("user.id"), nullable=False, index=True)
+    message = db.Column(db.String(500), nullable=False)
+    href = db.Column(db.String(500), nullable=False, default="/notifications")
+    read_at = db.Column(db.DateTime(timezone=True))
+
+
+class RateSync(db.Model):
+    day = db.Column(db.Date, primary_key=True)
+    checked_at = db.Column(db.DateTime(timezone=True), nullable=False)
+
+
 class Rate(db.Model):
     metal = db.Column(db.String(10), primary_key=True)
+    effective_date = db.Column(db.Date)
+    source = db.Column(db.String(20), nullable=False, default="manual")
+    per_ten_grams = db.Column(db.Numeric(18, 4))
+    per_tola = db.Column(db.Numeric(18, 4))
     value = db.Column(db.Numeric(18, 4), nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now)
     __table_args__ = (CheckConstraint("value > 0"), CheckConstraint("metal IN ('Gold','Silver')"))

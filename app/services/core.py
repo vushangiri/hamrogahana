@@ -62,6 +62,9 @@ def coordinates(lat, lon):
 
 
 def audit(action, entity, **detail):
+    from .notifications import notify_event
+
+    notify_event(action, entity, detail)
     db.session.add(
         Audit(
             actor_id=current_user.id if current_user.is_authenticated else None,

@@ -62,6 +62,20 @@ def create_app(config=None):
     def globals_():
         return {"mutation_token": lambda: str(uuid.uuid4()), "tile_url": app.config["TILE_URL"]}
 
+    @app.context_processor
+    def inbox_count():
+        from flask_login import current_user
+        from sqlalchemy import func, select
+        from .models import Notification
+        if not current_user.is_authenticated:
+            return {"unread_notifications": 0}
+        return {"unread_notifications": db.session.scalar(select(func.count()).select_from(Notification).where(Notification.user_id == current_user.id, Notification.read_at.is_(None)))}
+
+    @app.template_filter("nepal_time")
+    def nepal_time(value):
+        from .services.core import NEPAL
+        return value.astimezone(NEPAL).strftime("%d %b %Y, %H:%M")
+
     @app.template_filter("npr")
     def npr(value):
         return "Rs. " + format(value, ",.2f") if value is not None else "Rate unavailable"

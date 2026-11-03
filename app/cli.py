@@ -92,6 +92,23 @@ def register_cli(app):
             if not worked:
                 time.sleep(2)
 
+    @app.cli.command("rate-scheduler")
+    @click.option("--once", is_flag=True)
+    def rate_scheduler(once):
+        """Check every minute; retry failures within 10:45–11:15 Asia/Kathmandu."""
+        from .services.rates import sync_rates
+        while True:
+            try:
+                sync_rates()
+            except Exception:
+                db.session.rollback()
+                app.logger.exception("Daily rate import failed; retaining previous rates")
+            finally:
+                db.session.remove()
+            if once:
+                break
+            time.sleep(60)
+
     @app.cli.command("cleanup")
     def cleanup():
         """Delete unreferenced local media older than 24h, and expired throttles/tokens."""
