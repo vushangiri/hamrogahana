@@ -71,6 +71,21 @@ def create_app(config=None):
             return {"unread_notifications": 0}
         return {"unread_notifications": db.session.scalar(select(func.count()).select_from(Notification).where(Notification.user_id == current_user.id, Notification.read_at.is_(None)))}
 
+    @app.context_processor
+    def display_units():
+        from .services.units import unit_context
+        return {"unit_context": unit_context}
+
+    @app.template_filter("unit_rate")
+    def unit_rate(value):
+        from .services.units import unit_rate as convert
+        return convert(value)
+
+    @app.template_filter("unit_weight")
+    def unit_weight(value):
+        from .services.units import unit_weight as convert
+        return convert(value)
+
     @app.template_filter("nepal_time")
     def nepal_time(value):
         from .services.core import NEPAL

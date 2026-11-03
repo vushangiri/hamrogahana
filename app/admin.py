@@ -219,12 +219,16 @@ def rates():
 @admin_only
 def units(uid=None):
     once()
+    from .models import DisplaySettings
+    settings = db.session.scalar(select(DisplaySettings).where(DisplaySettings.id == 1).with_for_update())
     u = db.get_or_404(Unit, uid) if uid else Unit()
     u.name = text(request.form.get("name"), 80)
     u.symbol = text(request.form.get("symbol"), 20)
     u.grams = decimal(request.form.get("grams"), ".0000000001", "100000", 10)
     u.description = text(request.form.get("description"), 500, False)
     u.active = request.form.get("active") == "on"
+    if settings and settings.default_unit_id == u.id and not u.active:
+        raise ValueError("Choose another default unit before disabling this unit")
     db.session.add(u)
     db.session.flush()
     audit("unit.saved", u.id, grams=u.grams, active=u.active)
@@ -400,3 +404,25 @@ def review_password_reset(rid):
         response = render_template("password_reset_generated.html", password=generated, phone=item.phone)
         return response, 200, {"Cache-Control": "no-store", "Pragma": "no-cache"}
     return redirect("/admin/password-resets")
+
+
+@admin.post("/units/default")
+@admin_only
+def default_unit():
+    import uuid
+    from .models import DisplaySettings
+
+    once()
+    settings = db.session.scalar(select(DisplaySettings).where(DisplaySettings.id == 1).with_for_update())
+    selected = request.form.get("unit", "gram")
+    if selected == "gram":
+        uid = None
+    else:
+        unit = db.session.scalar(select(Unit).where(Unit.id == uuid.UUID(selected)).with_for_update())
+        if not unit or not unit.active:
+            raise ValueError("Choose an active unit")
+        uid = unit.id
+    settings.default_unit_id = uid
+    audit("unit.default", uid or "gram")
+    db.session.commit()
+    return redirect("/admin?tab=Units")

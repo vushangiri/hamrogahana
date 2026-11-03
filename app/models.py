@@ -233,3 +233,9 @@ class PasswordReset(Base):
         Index("ix_password_reset_pending_phone", "phone", unique=True,
               postgresql_where=db.text("status = 'pending'")),
     )
+
+
+class DisplaySettings(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    default_unit_id = db.Column(db.Uuid, db.ForeignKey("unit.id"))
+    __table_args__ = (CheckConstraint("id = 1"),)

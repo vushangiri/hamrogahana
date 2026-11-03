@@ -81,6 +81,26 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+If `sudo nginx -t` reports `could not build server_names_hash ... server_names_hash_bucket_size: 32`, edit the host's main configuration:
+
+```sh
+sudo nano /etc/nginx/nginx.conf
+```
+
+Inside the existing `http { ... }` block, add or uncomment this directive (replace an existing value rather than adding a duplicate):
+
+```nginx
+server_names_hash_bucket_size 64;
+```
+
+This is an `http`-level setting, not a directive for the domain's `server` block. If the same error remains at 64, increase it to 128. Save and validate before reloading:
+
+```sh
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Do not reload if validation fails. See [Nginx server name hash guidance](https://nginx.org/en/docs/http/server_names.html#optimization).
+
 Create the symlink only once. If this domain already has a virtual host, update that configuration instead of creating a duplicate. Keep other apps' virtual hosts and listeners in place.
 
 Allow inbound TCP **80 and 443** in your VPS provider's firewall. If UFW is already enabled, allow Nginx with `sudo ufw allow 'Nginx Full'`. Preserve your SSH rule; do not enable a new firewall blindly on a remote server. Do not open 8082 or PostgreSQL publicly.

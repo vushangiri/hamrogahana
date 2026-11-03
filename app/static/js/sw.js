@@ -1,5 +1,5 @@
-const VERSION='hg-1.1.0';
-const ASSETS=['/offline','/static/css/design.css','/static/css/app.css','/static/js/theme.js','/static/js/app.js','/static/vendor/htmx.min.js','/static/vendor/alpine-csp.min.js','/static/vendor/leaflet.js','/static/vendor/leaflet.css','/static/icons/icon-192.png','/static/icons/icon-512.png'];
+const VERSION='hg-1.2.0';
+const ASSETS=['/offline','/static/css/design.css','/static/css/app.css','/static/js/theme.js','/static/js/app.js','/static/js/motion.js','/static/vendor/htmx.min.js','/static/vendor/alpine-csp.min.js','/static/vendor/leaflet.js','/static/vendor/leaflet.css','/static/icons/icon-192.png','/static/icons/icon-512.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(VERSION).then(cache=>cache.addAll(ASSETS)))});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==VERSION).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(event.request.method!=='GET'||url.origin!==self.location.origin)return;if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match('/offline')));return}if(ASSETS.includes(url.pathname)&&url.pathname!=='/offline'){event.respondWith(caches.open(VERSION).then(async cache=>{const hit=await cache.match(event.request);return hit||fetch(event.request)}))}});

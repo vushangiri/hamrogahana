@@ -8,7 +8,10 @@ from app.extensions import db
 
 
 @pytest.fixture
-def app(tmp_path):
+def app(tmp_path, monkeypatch):
+    from app.services.units import GRAM
+    monkeypatch.setattr("app.services.units.unit_context", lambda: dict(
+        available_units=[GRAM], default_unit=GRAM, display_unit=GRAM))
     return create_app(
         {
             "TESTING": True,
@@ -49,6 +52,7 @@ def database(tmp_path):
         from flask import g
 
         g.pop("_login_user", None)
+        g.pop("display_units", None)
 
     # Isolated schema per test; no deletion of existing user tables.
     schema = "test_" + uuid.uuid4().hex

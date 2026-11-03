@@ -434,3 +434,22 @@ def forgot_password():
         db.session.commit()
         return render_template("forgot_password.html", submitted=True)
     return render_template("forgot_password.html", submitted=False)
+
+
+@web.post("/display-unit")
+def display_unit():
+    from .services.units import unit_context
+
+    selected = request.form.get("unit")
+    if selected not in {"default", *(str(u.id) for u in unit_context()["available_units"])}:
+        raise ValueError("Choose an available unit")
+    target = request.form.get("next", "/")
+    if not target.startswith("/") or target.startswith("//") or "\\" in target or any(ord(c) < 32 for c in target):
+        target = "/"
+    response = redirect(target)
+    if selected == "default":
+        response.delete_cookie("hg-unit")
+    else:
+        response.set_cookie("hg-unit", selected, max_age=365*86400, httponly=True,
+                            secure=current_app.config["SESSION_COOKIE_SECURE"], samesite="Lax")
+    return response
