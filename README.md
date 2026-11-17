@@ -120,7 +120,7 @@ Apply the latest database migration before running this version (`docker compose
 
 Admin → Units lets an administrator choose Gram or any active custom unit as the platform default. Public pages include a display-unit selector with an option to follow the platform default. Explicit visitor choices persist in a cookie. Product weights and per-unit metal rates use the selected unit; item totals, price filters, making charges and canonical gram calculations stay unchanged. Administrative input fields explicitly labelled per gram remain in grams. A unit must be replaced as the default before it can be disabled; visitors with a disabled or missing selection fall back to the current default.
 
-Navigation begins immediately, with short native page transitions where supported. Slower requests show a progress bar, followed by skeletons; images, searches, media buffering and additional list pages have their own loading feedback. Reduced-motion preferences disable decorative movement. Map scripts load only on pages with a map. Apply the latest migration before starting this version and keep the service worker version current when updating cached assets. Real-device performance still depends on network, media size and VPS response time.
+Navigation begins immediately, without page fade transitions. Slower requests show a progress bar, followed by skeletons; images, searches, media buffering and additional list pages have their own loading feedback. Reduced-motion preferences disable decorative movement. Map scripts load only on pages with a map. Apply the latest migration before starting this version and keep the service worker version current when updating cached assets. Real-device performance still depends on network, media size and VPS response time.
 
 
 ## Client feedback update
@@ -132,3 +132,24 @@ Products accept Gram or Tola weights and remember the input unit for editing. **
 Workspace → Products now includes each product’s photos and videos. **Take photo** and **Record video** open native camera capture on supported mobile browsers; ordinary file uploads remain available. Photo adjustments include quarter-turn rotation, centre square crop and brightness. Video adjustments include start/end trim (at least 5 seconds) and audio removal. The existing worker applies video edits and converts clips to MP4; original video limits (5–60 seconds, 100 MB) and plan allowances remain in effect. Native camera behaviour varies by device, and desktop browsers may show a file chooser instead. This is a small upload editor, without music, overlays or timeline effects.
 
 Dashboard tabs load their main content through HTMX, with full navigation for the map-based Store settings. Public navigation prefetches only links the visitor points at, focuses or touches, keeping at most three responses in service-worker memory for eight seconds. Responses are consumed once and invalidated by form submissions and save changes; private dashboards are excluded. Lists automatically load only the first three pages, then offer Load more to keep the document bounded. No framework or editing bundle is added.
+
+### Follow-up UI fixes (asset version 1.3.1)
+
+Card artwork has a fixed, clipped row above its text. Password fields render a Show/Hide text button, and Other product fields initialize independently of maps and other page scripts, including after partial navigation. Media previews fit within the viewport. Saved links carry the visitor’s selected coordinates; without a selected location, saved cards omit distance rather than assuming Kathmandu. Saved products are not limited by discovery radius.
+
+Versioned CSS/JavaScript URLs and immediate service-worker activation prevent an older asset cache from masking this update after refresh. Public media metadata loads in one query; published images/videos may be reused by the same browser for 60 seconds. Private uploads retain no-store responses. Page fades and the unused Alpine page script have been removed. This update introduces no new migration beyond 0005.
+
+With the updated files on the server, run from the project directory:
+
+```sh
+docker compose build app worker rates
+docker compose stop app worker rates
+docker compose up -d db
+docker compose run --rm app python -m flask --app wsgi db upgrade
+# Continue only if the migration command succeeds.
+docker compose up -d --force-recreate app worker rates nginx
+docker compose ps
+docker compose logs --tail=50 app worker rates
+```
+
+Recreating Nginx refreshes its upstream connection after the app container is replaced. Refresh the browser/PWA after restart to load asset version 1.3.1. `db upgrade` is safe when 0005 is already applied.

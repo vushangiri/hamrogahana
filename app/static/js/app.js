@@ -6,8 +6,10 @@ let toastTimer;
 function toast(message){const t=$('#toast');if(!t)return;t.textContent=message;t.classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.add('hidden'),4000)}
 function savedButtons(){const saved=new Set(read('hg-saved',[]));$$('[data-save]').forEach(b=>{const on=saved.has(b.dataset.save);b.textContent=b.classList.contains('saveBtn')?(on?'♥':'♡'):(on?'♥ Saved':'♡ Save');b.setAttribute('aria-pressed',String(on))})}
 const loc=read('hg-location',null);
-if(loc){$$('.locationLabel').forEach(el=>el.textContent='⌖ '+loc.label);const form=$('#searchForm');if(form){form.elements.lat.value=loc.lat;form.elements.lon.value=loc.lon}if(['/','/stores'].includes(location.pathname)&&!new URLSearchParams(location.search).has('lat')){const url=new URL(location.href);url.searchParams.set('lat',loc.lat);url.searchParams.set('lon',loc.lon);location.replace(url)}}
-if(location.pathname==='/saved'){const ids=read('hg-saved',[]).slice(0,100).join(',');const url=new URL(location.href);if((url.searchParams.get('ids')||'')!==ids){url.searchParams.set('ids',ids);location.replace(url)}}
+const initialURL=new URL(location.href);
+if(loc){$$('.locationLabel').forEach(el=>el.textContent='⌖ '+loc.label);const form=$('#searchForm');if(form){form.elements.lat.value=loc.lat;form.elements.lon.value=loc.lon}if(['/','/stores','/saved'].includes(location.pathname)&&!initialURL.searchParams.has('lat')){initialURL.searchParams.set('lat',loc.lat);initialURL.searchParams.set('lon',loc.lon)}}
+if(location.pathname==='/saved')initialURL.searchParams.set('ids',read('hg-saved',[]).slice(0,100).join(','));
+if(initialURL.href!==location.href)location.replace(initialURL);
 savedButtons();
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.hasAttribute('data-category')){const form=$('#searchForm');form.elements.category.value=b.dataset.category;$$('[data-category]').forEach(x=>x.classList.toggle('active',x===b));form.requestSubmit()}if(b.dataset.save){let ids=read('hg-saved',[]),id=b.dataset.save;if(ids.includes(id))ids=ids.filter(x=>x!==id);else{if(ids.length>=100)return toast('You can save up to 100 pieces on this device.');ids.push(id)}if(write('hg-saved',ids)){savedButtons();toast(ids.includes(id)?'Jewellery saved':'Removed from saved')}}if(b.dataset.theme)window.hgTheme(b.dataset.theme);if(b.hasAttribute('data-back'))history.back()});
 document.addEventListener('htmx:afterSwap',()=>savedButtons());
@@ -126,7 +128,7 @@ function syncPreferenceLinks(){
   $$('a[href]').forEach(link=>{
     const url=new URL(link.href,location.href);
     if(url.origin!==location.origin)return;
-    if(loc&&['/','/stores'].includes(url.pathname)&&!url.searchParams.has('lat')){
+    if(loc&&['/','/stores','/saved'].includes(url.pathname)&&!url.searchParams.has('lat')){
       url.searchParams.set('lat',loc.lat);url.searchParams.set('lon',loc.lon);link.href=url.href;
     }
     if(url.pathname==='/saved'){
@@ -138,14 +140,6 @@ syncPreferenceLinks();
 ['htmx:afterSwap','hg:content'].forEach(name=>document.addEventListener(name,syncPreferenceLinks));
 document.addEventListener('click',event=>{if(event.target.closest('[data-save]'))syncPreferenceLinks()});
 
-// Password visibility works for every password field, including future forms.
-$$('input[type="password"]').forEach(input=>{
- const wrap=document.createElement('div');wrap.className='passwordWrap';input.before(wrap);wrap.append(input);
- const button=document.createElement('button');button.type='button';button.className='textBtn';button.textContent='Show';button.setAttribute('aria-label','Show password');button.setAttribute('aria-pressed','false');
- button.addEventListener('click',()=>{const show=input.type==='password';input.type=show?'text':'password';button.textContent=show?'Hide':'Show';button.setAttribute('aria-label',show?'Hide password':'Show password');button.setAttribute('aria-pressed',String(show))});wrap.append(button);
-});
-function productFields(){const metal=$('#metal');if(!metal||!$('[data-metal-fields]'))return;const other=metal.value==='Other';$$('[data-metal-fields]').forEach(group=>{group.hidden=other;$$('input,select',group).forEach(el=>el.disabled=other)});const purity=$('#purity');purity.disabled=other;purity.parentElement.hidden=other;$$('option',purity).forEach(option=>{option.hidden=metal.value==='Gold'?!option.value.endsWith('K'):option.value.endsWith('K')});if(purity.selectedOptions[0]?.hidden)purity.value=metal.value==='Silver'?'999':'24K';$('#description').required=other;['name','category_id','tags'].forEach(name=>{const el=document.getElementById(name);if(!el)return;el.disabled=other;el.hidden=other;const label=document.querySelector(`label[for="${name}"]`);if(label)label.hidden=other});const fixedLabel=document.querySelector('label[for="fixed"]');if(fixedLabel)fixedLabel.textContent=other?'Price / NPR':'Fixed charge / NPR';}
-$('#metal')?.addEventListener('change',productFields);productFields();
 // Remove unsaved cards immediately, including after browser back restoration.
 function reconcileSaved(){savedButtons();if(location.pathname!=='/saved')return;const ids=new Set(read('hg-saved',[]));$$('.productCard').forEach(card=>{if(!ids.has($('[data-save]',card)?.dataset.save))card.remove()});if(!$('.productCard')&&!$('[data-infinite-next]')){const list=$('#product-list');if(list)list.innerHTML='<p class="empty">Tap ♡ on jewellery to save it here.</p>'}}
 document.addEventListener('click',e=>{if(e.target.closest('[data-save]'))reconcileSaved()});window.addEventListener('pageshow',reconcileSaved);window.addEventListener('storage',()=>{reconcileSaved();syncPreferenceLinks()});

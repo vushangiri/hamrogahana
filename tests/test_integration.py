@@ -454,3 +454,32 @@ def test_admin_list_search_and_pagination(database, tab):
         assert "Searchable Ring 11" in c.get("/admin?tab=Products&q=Special+craft+11").text
         assert "Searchable Ring 11" in c.get("/admin?tab=Products&q=tag11").text
         assert "Searchable Ring" in c.get("/admin?tab=Products&q=Test+Jeweller").text
+
+
+def test_public_media_uses_bounded_private_cache_and_one_metadata_query(database):
+    from sqlalchemy import event
+    from app.models import Media
+    c=database.test_client()
+    auth(c,database.config['TEST_OWNER_ID'])
+    p=product(database)
+    c.post(f'/merchant/products/{p.id}/media',data=token(kind='image',file=(image_file(),'photo.png')))
+    p.status='published'
+    db.session.commit()
+    m=db.session.scalar(select(Media).where(Media.product_id==p.id))
+    mid=m.id
+    db.session.remove()
+    statements=[]
+    def record(connection,cursor,statement,parameters,context,many):
+        if statement.lstrip().upper().startswith('SELECT'):
+            statements.append(statement)
+    guest=database.test_client()
+    event.listen(db.engine,'before_cursor_execute',record)
+    try:
+        response=guest.get(f'/media/{mid}/640')
+    finally:
+        event.remove(db.engine,'before_cursor_execute',record)
+    assert response.status_code==200
+    assert response.headers['Cache-Control']=='private, max-age=60, must-revalidate'
+    assert len(statements)==1
+    cached=guest.get(f'/media/{mid}/640',headers={'If-None-Match':response.headers['ETag']})
+    assert cached.status_code==304

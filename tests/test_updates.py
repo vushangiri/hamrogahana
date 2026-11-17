@@ -143,3 +143,21 @@ def test_product_options_and_empty_saved(database):
     store = db.session.get(Store, database.config['TEST_STORE_ID'])
     assert store.surplus == 100 and store.silver_surplus == 10
     assert b'Photos & videos' in c.get('/merchant?tab=Products').data
+
+
+def test_saved_distances_use_explicit_location_and_do_not_filter_by_radius(database):
+    from app.models import Category, Product
+    c=database.test_client()
+    store=db.session.get(Store,database.config['TEST_STORE_ID'])
+    category=db.session.scalar(select(Category))
+    piece=Product(store_id=store.id,category_id=category.id,name='Saved location ring',
+                  metal='Gold',purity=1,weight=1,making=0,fixed=0,status='published')
+    db.session.add(piece)
+    db.session.commit()
+    path=f'/saved?ids={piece.id}'
+    assert 'Saved location ring' in c.get(path).text
+    assert ' km · ' not in c.get(path).text
+    local=c.get(path+f'&lat={store.latitude}&lon={store.longitude}').text
+    assert '0.0 km' in local
+    distant=c.get(path+'&lat=0&lon=0').text
+    assert 'Saved location ring' in distant and ' km' in distant

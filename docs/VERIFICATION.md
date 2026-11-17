@@ -72,3 +72,11 @@ Follow README.md to run the source on Docker Desktop or Ubuntu. Run all PostgreS
 - JavaScript syntax checks, Python compilation and Git whitespace checks passed.
 - Physical camera capture still requires Android/iPhone checks. Automated browser checks exercise file selection and editor controls, not device camera hardware. Music, overlays and timeline effects are outside the small upload editor.
 - Changes have not been deployed. Apply migration 0005 before starting the new app/worker code. The worker is required for video adjustments and MP4 conversion.
+
+### Follow-up UI verification — 17 November 2026
+
+- Full backend suite: **92 passed**, including explicit saved-location distances, saved visibility outside discovery radius, one-query public media retrieval and conditional media revalidation.
+- Full browser suite: **24 passed**, across 390×844 and 360×800. This includes password Show/Hide, tall/wide image bounds, large media preview bounds, location propagation to Saved, public navigation, loading feedback, display units and PWA checks.
+- Authenticated isolated browser checks with 200 published test products passed owner tab navigation, media editor initialization, Other form visibility/validation, bounded pagination and admin Plans controls without JavaScript errors.
+- Flask preview was restarted after template changes before final browser checks. Versioned asset URLs and a new worker version cover client cache updates.
+- No production deployment or production latency benchmark was performed. The camera-device check from the preceding update remains outstanding.

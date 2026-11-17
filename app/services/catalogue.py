@@ -23,14 +23,17 @@ def price_expression():
     )
 
 
-def catalogue(args, page_size=10, store_id=None):
+def catalogue(args, page_size=10, store_id=None, saved=False):
     filters = list(public_conditions())
     if store_id is None:
         lat, lon = coordinates(args.get("lat", "27.704"), args.get("lon", "85.311"))
         radius = decimal(args.get("radius", "50"), ".1", "1000")
         point = func.ST_GeogFromText(f"SRID=4326;POINT({lon} {lat})")
         distance = func.ST_Distance(Store.location, point)
-        filters.append(func.ST_DWithin(Store.location, point, radius * 1000))
+        if saved and not (args.get("lat") and args.get("lon")):
+            distance = cast(literal(None), Numeric)
+        if not saved:
+            filters.append(func.ST_DWithin(Store.location, point, radius * 1000))
     else:
         # A store's own catalogue includes its full published range, regardless of location.
         distance = cast(literal(None), Numeric)

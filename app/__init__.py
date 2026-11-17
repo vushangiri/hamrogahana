@@ -107,7 +107,7 @@ def create_app(config=None):
         if app.config["SESSION_COOKIE_SECURE"]:
             response.headers["Strict-Transport-Security"] = "max-age=31536000"
         if not request.path.startswith("/static/"):
-            response.headers["Cache-Control"] = "no-store"
+            response.headers.setdefault("Cache-Control", "no-store")
         return response
 
     @app.errorhandler(ValueError)

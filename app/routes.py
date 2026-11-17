@@ -152,7 +152,7 @@ def store(sid):
 @web.get("/saved")
 def saved():
     rows, more, page = catalogue(
-        {**request.args, "ids": request.args.get("ids", str(uuid.UUID(int=0))), "radius": "1000"}
+        {**request.args, "ids": request.args.get("ids", str(uuid.UUID(int=0)))}, saved=True
     )
     return render_template("saved.html", rows=rows, more=more, page=page, active="saved")
 
@@ -262,7 +262,13 @@ def register():
 
 
 def accessible_media(mid):
-    m = db.get_or_404(Media, mid)
+    m = db.session.scalar(select(Media).where(Media.id == mid).options(
+        joinedload(Media.product).joinedload(Product.store),
+        joinedload(Media.product).noload(Product.media),
+        joinedload(Media.product).noload(Product.tags),
+    ))
+    if m is None:
+        abort(404)
     public = (
         m.kind in ("image", "reel")
         and m.status == "ready"
@@ -311,7 +317,9 @@ def media(mid, variant):
         if key.endswith(".mp4") else "image/webp",
         download_name="evidence.pdf" if key.endswith(".upload") else None,
     )
-    response.headers["Cache-Control"] = "private, no-store"
+    public = (m.kind in ("image", "reel") and m.status == "ready"
+              and m.product and m.product.status == "published" and eligible(m.product.store))
+    response.headers["Cache-Control"] = "private, max-age=60, must-revalidate" if public else "private, no-store"
     return response
 
 
