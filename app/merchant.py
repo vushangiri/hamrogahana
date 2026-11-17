@@ -24,6 +24,7 @@ from .services.core import (
     text,
 )
 from .services.media import upload
+from .services.rates import TOLA_GRAMS
 
 merchant = Blueprint("merchant", __name__, url_prefix="/merchant")
 
@@ -41,6 +42,8 @@ def dashboard():
     tab = request.args.get("tab", "Overview")
     if tab not in ("Overview", "Products", "Media", "Featured", "Store", "Subscription"):
         abort(404)
+    if tab == "Media":
+        tab = "Products"
     page = max(1, min(10000, int(request.args.get("page", 1))))
     base = select(Product).where(Product.store_id == s.id)
     product_count = db.session.scalar(select(func.count()).select_from(base.subquery()))
@@ -61,6 +64,7 @@ def dashboard():
     return render_template(
         "merchant.html",
         store=s,
+        tola_grams=TOLA_GRAMS,
         products=products[:10],
         more=len(products) > 10,
         page=page,
@@ -75,8 +79,8 @@ def dashboard():
             .where(Upgrade.store_id == s.id)
             .order_by(Upgrade.created_at.desc())
             .limit(50)
-        ).all(),
-        plans=db.session.scalars(select(Plan).order_by(Plan.products)).all(),
+        ).all() if tab == "Subscription" else [],
+        plans=db.session.scalars(select(Plan).order_by(Plan.products)).all() if tab == "Subscription" else [],
     )
 
 
@@ -102,11 +106,14 @@ def edit_product(pid=None):
             if count >= s.plan.products:
                 raise ValueError("Product allowance reached")
             p = Product(store_id=s.id)
-        p.name = text(request.form.get("name"))
+        other = request.form.get("metal") == "Other"
+        p.name = text(request.form.get("description"), 5000)[:150] if other else text(request.form.get("name"))
         p.description = text(request.form.get("description"), 5000, False)
         import uuid
 
-        category = db.get_or_404(Category, uuid.UUID(request.form.get("category_id", "")))
+        category = db.session.scalar(select(Category).order_by(Category.name).limit(1)) if other else db.get_or_404(Category, uuid.UUID(request.form.get("category_id", "")))
+        if category is None:
+            raise ValueError("An administrator must create a product category first")
         p.category_id = category.id
         metal = request.form.get("metal")
         purity_code = request.form.get("purity")
@@ -114,12 +121,23 @@ def edit_product(pid=None):
             "Gold": {"24K": Decimal(1), "22K": Decimal(22) / 24, "18K": Decimal(".75")},
             "Silver": {"999": Decimal(".999"), "925": Decimal(".925")},
         }
-        if metal not in allowed or purity_code not in allowed[metal]:
+        if metal != "Other" and (metal not in allowed or purity_code not in allowed[metal]):
             raise ValueError("Choose a valid metal and purity combination")
-        p.metal, p.purity = metal, allowed[metal][purity_code].quantize(Decimal(".0000000001"))
-        p.weight = decimal(request.form.get("weight"), ".000001", "100000", 6)
-        p.making = decimal(request.form.get("making"), places=4)
-        p.fixed = decimal(request.form.get("fixed"), places=4)
+        p.metal = metal
+        if metal == "Other":
+            p.description = text(request.form.get("description"), 5000)
+            p.weight_unit = "gram"
+            p.purity, p.weight, p.making = Decimal(1), Decimal(1), Decimal(0)
+            p.fixed = decimal(request.form.get("fixed"), places=4)
+        else:
+            p.purity = allowed[metal][purity_code].quantize(Decimal(".0000000001"))
+            unit = request.form.get("weight_unit", "gram")
+            if unit not in ("gram", "tola"):
+                raise ValueError("Choose Gram or Tola")
+            p.weight_unit = unit
+            p.weight = (decimal(request.form.get("weight"), ".000001", "100000", 6) * (TOLA_GRAMS if unit == "tola" else 1)).quantize(Decimal(".000001"))
+            p.making = decimal(request.form.get("making"), places=4)
+            p.fixed = decimal(request.form.get("fixed"), places=4)
         names = sorted(
             {text(x, 60).lower() for x in request.form.get("tags", "").split(",") if x.strip()}
         )
@@ -133,7 +151,7 @@ def edit_product(pid=None):
                 )
                 tags.append(db.session.scalar(select(Tag).where(Tag.name == name)))
         p.tags = tags
-        p.search_text = " ".join([p.name, p.description, category.name, metal, purity_code, *names])
+        p.search_text = " ".join([p.name, p.description, category.name, metal, purity_code or "", *names])
         db.session.add(p)
         db.session.flush()
         audit("product.saved", p.id)
@@ -142,6 +160,7 @@ def edit_product(pid=None):
     return render_template(
         "edit_product.html",
         product=p,
+        tola_grams=TOLA_GRAMS,
         categories=db.session.scalars(select(Category).order_by(Category.name)).all(),
     )
 
@@ -188,10 +207,22 @@ def media_upload(pid):
     kind = request.form.get("kind")
     if kind not in ("image", "reel"):
         abort(400)
-    upload(request.files.get("file"), s, kind, p)
+    edits = {
+        "rotate": int(decimal(request.form.get("rotate", "0"), "0", "270", 0)),
+        "square": request.form.get("square") == "1",
+        "brightness": float(decimal(request.form.get("brightness", "1"), ".5", "1.5", 2)),
+        "start": float(decimal(request.form.get("start", "0"), "0", "60", 2)),
+        "end": float(decimal(request.form.get("end", "0") or "0", "0", "60", 2)),
+        "mute": request.form.get("mute") == "1",
+    }
+    if edits["rotate"] not in (0, 90, 180, 270):
+        raise ValueError("Choose a quarter-turn rotation")
+    if kind == "reel" and edits["end"] and edits["end"] - edits["start"] < 5:
+        raise ValueError("Select at least 5 seconds of video")
+    upload(request.files.get("file"), s, kind, p, edits)
     db.session.commit()
     flash("Upload received. Reels appear after processing; refresh to check status.")
-    return redirect("/merchant?tab=Media")
+    return redirect("/merchant?tab=Products")
 
 
 @merchant.post("/media/<uuid:mid>/remove")
@@ -209,7 +240,7 @@ def remove_media(mid):
         cancel_features(product_id=p.id)
     audit("media.removed", m.id)
     db.session.commit()
-    return redirect("/merchant?tab=Media")
+    return redirect("/merchant?tab=Products")
 
 
 @merchant.post("/profile")
@@ -218,6 +249,7 @@ def profile():
     once()
     s = locked_store(my_store().id)
     before = s.surplus
+    before_silver = s.silver_surplus
     lat, lon = coordinates(request.form.get("latitude"), request.form.get("longitude"))
     s.name = text(request.form.get("name"))
     s.phone = phone(request.form.get("phone", ""))
@@ -227,12 +259,19 @@ def profile():
     s.whatsapp = phone(request.form["whatsapp"]) if request.form.get("whatsapp", "").strip() else None
     s.address = text(request.form.get("address"), 500)
     s.latitude, s.longitude, s.location = lat, lon, f"SRID=4326;POINT({lon} {lat})"
-    s.surplus = decimal(request.form.get("surplus"), places=4)
+    surplus_unit = request.form.get("surplus_unit", "gram")
+    if surplus_unit not in ("gram", "tola"):
+        raise ValueError("Choose Gram or Tola for surplus")
+    divisor = TOLA_GRAMS if surplus_unit == "tola" else Decimal(1)
+    s.surplus = (decimal(request.form.get("surplus"), places=4) / divisor).quantize(Decimal(".0001"))
+    s.silver_surplus = (decimal(request.form.get("silver_surplus"), places=4) / divisor).quantize(Decimal(".0001")) if "silver_surplus" in request.form else s.silver_surplus
     audit(
         "store.profile",
         s.id,
         previous_surplus=before,
         new_surplus=s.surplus,
+        previous_silver_surplus=before_silver,
+        new_silver_surplus=s.silver_surplus,
         latitude=lat,
         longitude=lon,
     )

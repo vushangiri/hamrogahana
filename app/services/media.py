@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from flask import current_app
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 from sqlalchemy import or_, select
 
 from ..extensions import db
@@ -57,7 +57,7 @@ def inspect_video(path):
         raise ValueError("Cannot read this video") from None
 
 
-def compress_image(source):
+def compress_image(source, edits=None):
     """Decode supported still images, orient them and emit bounded WebP variants."""
     generated = []
     try:
@@ -68,6 +68,13 @@ def compress_image(source):
         with Image.open(source) as im:
             image = ImageOps.exif_transpose(im)
             image = image.convert("RGBA" if "A" in image.getbands() or "transparency" in image.info else "RGB")
+            edits = edits or {}
+            image = image.rotate(-edits.get("rotate", 0), expand=True)
+            if edits.get("square"):
+                side = min(image.size)
+                left, top = (image.width-side)//2, (image.height-side)//2
+                image = image.crop((left, top, left+side, top+side))
+            image = ImageEnhance.Brightness(image).enhance(edits.get("brightness", 1))
             variants = {}
             for width in (320, 640, 1280):
                 resized = image.copy()
@@ -83,12 +90,17 @@ def compress_image(source):
         raise ValueError("Use a supported image under 30 megapixels, or PDF for evidence") from None
 
 
-def transcode_video(source, output, thumb):
-    inspect_video(source)
+def transcode_video(source, output, thumb, edits=None):
+    duration = inspect_video(source)
+    edits = edits or {}
+    start, end = edits.get("start", 0), edits.get("end", 0) or duration
+    if not 0 <= start < end <= duration + .1 or end - start < 5:
+        raise ValueError("Choose a video segment of at least 5 seconds within the clip")
     subprocess.run(
         [
             "ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(source),
-            "-map", "0:v:0", "-map", "0:a:0?",
+            "-ss", str(start), "-t", str(end-start),
+            "-map", "0:v:0", *([] if edits.get("mute") else ["-map", "0:a:0?"]),
             "-vf", "scale=720:1280:force_original_aspect_ratio=decrease:force_divisible_by=2,"
             "pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30",
             "-c:v", "libx264", "-preset", "fast", "-crf", "26", "-pix_fmt", "yuv420p",
@@ -104,7 +116,7 @@ def transcode_video(source, output, thumb):
     )
 
 
-def upload(file, store, kind, product=None):
+def upload(file, store, kind, product=None, edits=None):
     store = locked_store(store.id)
     if not file or not file.filename:
         raise ValueError("Select a file")
@@ -144,6 +156,7 @@ def upload(file, store, kind, product=None):
             store_id=store.id, product_id=product.id if product else None, kind=kind, source=key
         )
         if kind == "reel":
+            m.variants = edits or {}
             # Probe runs in worker as well; validation cannot block a web worker.
             db.session.add(m)
             db.session.flush()
@@ -153,7 +166,7 @@ def upload(file, store, kind, product=None):
                 m.status = "ready"
                 m.output = key
             else:
-                m.variants = compress_image(target)
+                m.variants = compress_image(target, edits)
                 m.output = m.variants["1280"]
                 m.thumbnail = m.variants["320"]
                 m.status = "ready"
@@ -191,7 +204,7 @@ def process_one():
     db.session.commit()
     output, thumb = uuid.uuid4().hex + ".mp4", uuid.uuid4().hex + ".webp"
     try:
-        transcode_video(path_for(source), path_for(output), path_for(thumb))
+        transcode_video(path_for(source), path_for(output), path_for(thumb), media.variants)
         error = None
     except (ValueError, subprocess.SubprocessError, OSError) as exc:
         error = str(exc)[:400]

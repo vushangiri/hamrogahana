@@ -1,4 +1,4 @@
-from sqlalchemy import Numeric, cast, func, literal, select
+from sqlalchemy import case, Numeric, cast, func, literal, select
 from sqlalchemy.orm import joinedload, selectinload
 
 from ..extensions import db
@@ -13,8 +13,8 @@ def public_conditions():
 def price_expression():
     return cast(
         func.round(
-            Rate.value * Product.purity * Product.weight
-            + Store.surplus * Product.weight
+            func.coalesce(Rate.value, 0) * Product.purity * Product.weight
+            + case((Product.metal == "Other", 0), (Product.metal == "Silver", Store.silver_surplus), else_=Store.surplus) * Product.weight
             + Product.making
             + Product.fixed,
             2,
@@ -71,11 +71,11 @@ def catalogue(args, page_size=10, store_id=None):
             )
             .exists()
         )
-    if args.get("ids"):
+    if "ids" in args:
         import uuid
 
         try:
-            filters.append(Product.id.in_([uuid.UUID(x) for x in args["ids"].split(",")[:100]]))
+            filters.append(Product.id.in_([uuid.UUID(x) for x in filter(None, args["ids"].split(",")[:100])]))
         except ValueError:
             raise ValueError("Invalid saved product identifier") from None
     order = {
@@ -91,7 +91,7 @@ def catalogue(args, page_size=10, store_id=None):
             func.row_number().over(partition_by=Product.store_id, order_by=order).label("turn"),
         )
         .join(Store)
-        .join(Rate, Rate.metal == Product.metal)
+        .outerjoin(Rate, Rate.metal == Product.metal)
         .where(*filters)
         .subquery()
     )
@@ -103,7 +103,7 @@ def catalogue(args, page_size=10, store_id=None):
         select(Product, base.c.price, base.c.distance)
         .join(base, base.c.pid == Product.id)
         .join(Store)
-        .join(Rate, Rate.metal == Product.metal)
+        .outerjoin(Rate, Rate.metal == Product.metal)
         .options(
             joinedload(Product.store),
             joinedload(Product.category),

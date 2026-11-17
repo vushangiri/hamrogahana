@@ -9,6 +9,8 @@ from ..extensions import db
 from ..models import Audit, Rate, RateSync, now
 from .core import NEPAL, decimal
 
+TOLA_GRAMS = Decimal("11.6638")
+
 URL = "https://api.fenegosida.org/api/website/v1/Dashboard/today"
 
 
@@ -21,6 +23,8 @@ def parse_rates(payload, day):
         metal = "Gold" if "छापावाल सुन" in label else "Silver" if "चाँदी" in label else None
         if not metal:
             continue
+        if "१ तोला" not in label:
+            continue
         stamp = datetime.fromisoformat(row["todayDate"].replace("Z", "+00:00"))
         if stamp.tzinfo is None or stamp.astimezone(NEPAL).date() != day:
             raise ValueError("Feed rates are not for today in Nepal")
@@ -29,8 +33,8 @@ def parse_rates(payload, day):
             if unit in result.setdefault(metal, {}):
                 raise ValueError("Duplicate rate in feed")
             result[metal][unit] = decimal(row["todayBaseRatePerGram"], ".0001", places=4)
-    if any(set(result.get(m, {})) != {"ten", "tola"} for m in ("Gold", "Silver")):
-        raise ValueError("Feed must contain both units for gold and silver")
+    if any(set(result.get(m, {})) != {"tola"} for m in ("Gold", "Silver")):
+        raise ValueError("Feed must contain Tola rates for gold and silver")
     return result
 
 
@@ -58,8 +62,8 @@ def sync_rates(at=None):
             rate = Rate(metal=metal)
             db.session.add(rate)
         previous = rate.value
-        rate.value = (values[metal]["ten"] / Decimal(10)).quantize(Decimal(".0001"))
-        rate.per_ten_grams, rate.per_tola = values[metal]["ten"], values[metal]["tola"]
+        rate.value = (values[metal]["tola"] / TOLA_GRAMS).quantize(Decimal(".0001"))
+        rate.per_ten_grams, rate.per_tola = None, values[metal]["tola"]
         rate.effective_date, rate.source, rate.updated_at = local.date(), "fenegosida", started
         db.session.add(Audit(action="rate.changed", entity_id=metal, detail={"previous": str(previous), "new": str(rate.value), "reason": "FENEGOSIDA daily import", "date": str(local.date())}))
     db.session.add(RateSync(day=local.date(), checked_at=started))

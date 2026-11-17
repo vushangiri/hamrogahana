@@ -120,7 +120,7 @@ def dashboard():
             .where(Upgrade.status == "pending")
             .limit(50)
         ).all(),
-        stores=db.session.scalars(select(Store).order_by(Store.created_at.desc()).limit(100)).all()
+        stores=db.session.scalars(select(Store).options(joinedload(Store.plan)).order_by(Store.created_at.desc()).limit(100)).all()
         if tab == "Plans"
         else [],
         history=db.session.scalars(

@@ -1,14 +1,15 @@
 import uuid
 from decimal import Decimal
 
+from sqlalchemy import select
+
 from app.extensions import db
 from app.models import DisplaySettings, Unit
 from test_integration import auth, product, token
 
 
 def test_default_and_visitor_unit_conversions(database):
-    unit=Unit(name="Tola",symbol="tola",grams=Decimal("11.6638"))
-    db.session.add(unit)
+    unit=db.session.scalar(select(Unit).where(Unit.name=="Tola"))
     db.session.commit()
     uid=unit.id
     p=product(database)

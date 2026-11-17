@@ -63,3 +63,12 @@ Source implementation is delivered. **The full acceptance criteria are not yet v
 ## Next release gate
 
 Follow README.md to run the source on Docker Desktop or Ubuntu. Run all PostgreSQL tests, the Playwright suite and docs/ACCEPTANCE.md. Fix any observed failures before public launch. Keep the checks above separated from checks run later on the target infrastructure.
+
+## Client feedback update — 17 November 2026
+
+- Full Python suite: **90 passed**, using Docker and isolated PostgreSQL/PostGIS schemas, including migration 0005, Tola imports, separate metal surplus, Other product pricing, image adjustments and FFmpeg trim/mute.
+- New Playwright feedback suite: **3 passed** at 390×844 (password visibility, empty saved collection, save/unsave across reload).
+- Additional isolated browser run with 200 published test products passed image containment, saved state, HTMX workspace tabs, editor initialization after partial navigation, Other form validation, bounded automatic pagination, horizontal overflow and collapsed admin Plans configuration checks. This verifies functional behavior at that catalogue size; it is not a production latency benchmark.
+- JavaScript syntax checks, Python compilation and Git whitespace checks passed.
+- Physical camera capture still requires Android/iPhone checks. Automated browser checks exercise file selection and editor controls, not device camera hardware. Music, overlays and timeline effects are outside the small upload editor.
+- Changes have not been deployed. Apply migration 0005 before starting the new app/worker code. The worker is required for video adjustments and MP4 conversion.

@@ -47,7 +47,7 @@ def product_context(p):
     rate = db.session.get(Rate, p.metal)
     return {
         "product": p,
-        "cost": breakdown(rate.value, p.purity, p.weight, p.store.surplus, p.making, p.fixed),
+        "cost": breakdown(rate.value if rate else 0, p.purity, p.weight, p.store.surplus_for(p.metal) if rate else 0, p.making, p.fixed),
         "units": db.session.scalars(select(Unit).where(Unit.active)).all(),
         "rate": rate,
     }
@@ -74,11 +74,11 @@ def discover():
     spotlight = []
     for f in features:
         p = f.product
-        r = current_rates[p.metal]
+        r = current_rates.get(p.metal)
         spotlight.append(
             (
                 p,
-                breakdown(r.value, p.purity, p.weight, p.store.surplus, p.making, p.fixed)["total"],
+                breakdown(r.value if r else 0, p.purity, p.weight, p.store.surplus_for(p.metal) if r else 0, p.making, p.fixed)["total"],
                 None,
             )
         )
@@ -247,6 +247,7 @@ def register():
             longitude=lon,
             location=f"SRID=4326;POINT({lon} {lat})",
             surplus=decimal(request.form.get("surplus"), places=4),
+            silver_surplus=decimal(request.form.get("silver_surplus", "0"), places=4),
         )
         db.session.add(s)
         db.session.flush()

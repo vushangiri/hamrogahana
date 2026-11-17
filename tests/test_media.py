@@ -122,3 +122,33 @@ def test_video_conversion_accepts_other_formats(tmp_path, container, codec):
     assert float(data["format"]["duration"]) == 5
     with Image.open(thumb) as image:
         assert image.format == "WEBP" and image.size == (360, 640)
+
+
+def test_photo_adjustments(app, tmp_path):
+    from PIL import Image
+    from app.services.media import compress_image
+    source = tmp_path / 'photo.png'
+    Image.new('RGB', (200, 100), (100, 100, 100)).save(source)
+    with app.app_context():
+        variants = compress_image(source, {'rotate': 90, 'square': True, 'brightness': .5})
+        with Image.open(path_for(variants['1280'])) as result:
+            assert result.size == (100, 100)
+            assert 45 <= result.getpixel((50, 50))[0] <= 55
+
+
+def test_video_trim_and_mute(tmp_path):
+    import json
+    from app.services.media import transcode_video
+    if not shutil.which('ffmpeg'):
+        pytest.skip('ffmpeg unavailable')
+    source, output, thumb = (tmp_path / name for name in ('source.mp4', 'trim.mp4', 'trim.webp'))
+    subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-f', 'lavfi', '-i',
+                    'color=c=gold:s=160x120:r=5', '-f', 'lavfi', '-i', 'sine=frequency=440',
+                    '-t', '8', '-c:v', 'mpeg4', '-c:a', 'aac', '-threads', '1', str(source)], check=True)
+    transcode_video(source, output, thumb, {'start': 1, 'end': 6, 'mute': True})
+    data = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_streams',
+                                               '-show_format', '-of', 'json', str(output)]))
+    assert abs(float(data['format']['duration']) - 5) < .1
+    assert all(stream['codec_type'] != 'audio' for stream in data['streams'])
+    with pytest.raises(ValueError, match='at least 5 seconds'):
+        transcode_video(source, output, thumb, {'start': 5, 'end': 6})

@@ -15,6 +15,7 @@ def test_populated_public_templates(app):
         longitude=D("85.311"),
         phone="+9779800000001",
         surplus=D(100),
+        silver_surplus=D(10),
         address="Kathmandu",
     )
     p = NS(
@@ -102,6 +103,7 @@ def test_merchant_and_admin_populated_views(app):
         latitude=D("27.704"),
         longitude=D("85.311"),
         surplus=D(100),
+        silver_surplus=D(10),
     )
     media = NS(id=mid, kind="reel", status="ready", output="test.mp4", error=None)
     product = NS(id=pid, name="Test Ring", status="published", media=[media], store=store)
@@ -124,6 +126,7 @@ def test_merchant_and_admin_populated_views(app):
             html = render_template(
                 "merchant.html",
                 store=store,
+                tola_grams=D("11.6638"),
                 products=[product],
                 tab=tab,
                 features=[feature],

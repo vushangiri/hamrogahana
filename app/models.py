@@ -50,12 +50,18 @@ class Store(Base):
     longitude = db.Column(db.Numeric(10, 7), nullable=False)
     location = db.Column(Geography("POINT", srid=4326), nullable=False)
     surplus = db.Column(db.Numeric(18, 4), nullable=False, default=0)
+    silver_surplus = db.Column(db.Numeric(18, 4), nullable=False, default=0)
+
+    def surplus_for(self, metal):
+        return self.silver_surplus if metal == "Silver" else self.surplus
+
     verification = db.Column(db.String(16), nullable=False, default="pending", index=True)
     active = db.Column(db.Boolean, nullable=False, default=True)
     plan_name = db.Column(db.String(16), db.ForeignKey("plan.name"), nullable=False, default="Free")
     plan = db.relationship(Plan)
     __table_args__ = (
         CheckConstraint("surplus >= 0"),
+        CheckConstraint("silver_surplus >= 0"),
         CheckConstraint("latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180"),
         CheckConstraint("verification IN ('pending','verified','rejected')"),
     )
@@ -106,8 +112,9 @@ class Product(Base):
     category = db.relationship(Category)
     name = db.Column(db.String(150), nullable=False)
     description = db.Column(db.Text, nullable=False, default="")
-    metal = db.Column(db.String(10), db.ForeignKey("rate.metal"), nullable=False, index=True)
+    metal = db.Column(db.String(10), nullable=False, index=True)
     purity = db.Column(db.Numeric(12, 10), nullable=False)
+    weight_unit = db.Column(db.String(4), nullable=False, default="gram")
     weight = db.Column(db.Numeric(16, 6), nullable=False)
     making = db.Column(db.Numeric(18, 4), nullable=False, default=0)
     fixed = db.Column(db.Numeric(18, 4), nullable=False, default=0)
@@ -116,6 +123,7 @@ class Product(Base):
     tags = db.relationship(Tag, secondary=product_tag, lazy="selectin")
     media = db.relationship("Media", lazy="selectin", order_by="Media.created_at")
     __table_args__ = (
+        CheckConstraint("metal IN ('Gold','Silver','Other')"),
         CheckConstraint("weight > 0 AND purity > 0 AND purity <= 1 AND making >= 0 AND fixed >= 0"),
         CheckConstraint("status IN ('draft','published','archived','suspended','excess')"),
         Index("ix_product_catalogue", "status", "metal", "category_id", "created_at"),
