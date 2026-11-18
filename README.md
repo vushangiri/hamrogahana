@@ -153,3 +153,20 @@ docker compose logs --tail=50 app worker rates
 ```
 
 Recreating Nginx refreshes its upstream connection after the app container is replaced. Refresh the browser/PWA after restart to load asset version 1.3.1. `db upgrade` is safe when 0005 is already applied.
+
+### Upgrade to 1.3.2
+
+Back up PostgreSQL, then build the new images and apply migration 0006 before starting the updated services.
+
+```sh
+docker compose build app worker rates
+docker compose stop app worker rates
+docker compose run --rm app python -m flask --app wsgi db upgrade
+# Continue only if the migration succeeds.
+docker compose up -d --force-recreate app worker rates nginx
+docker compose ps
+```
+
+Refresh the browser or installed app. In **Merchant → Products**, choose a standard purity or **Custom percentage** for gold and silver. Enter a making percentage from 0 to 100. For example, 10% on 100 g adds 10 g of making weight, priced at the current metal rate per gram. Existing NPR making charges stay in place until you enter a percentage.
+
+To enable reel bonuses, set `REEL_VIEWS_PER_BONUS_HOUR` in `.env` before recreating the app. The default is `0` (disabled). Each signed-in account can count once per reel per Nepal calendar week after watching three seconds in the Reels feed. Store owners’ own views are excluded. Every full threshold earns one extra featured hour for the following week on Standard and Premium, up to three extra hours. The bonus appears in **Merchant → Featured** when that week begins and can be booked during that week.

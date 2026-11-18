@@ -117,6 +117,7 @@ class Product(Base):
     weight_unit = db.Column(db.String(4), nullable=False, default="gram")
     weight = db.Column(db.Numeric(16, 6), nullable=False)
     making = db.Column(db.Numeric(18, 4), nullable=False, default=0)
+    making_percentage = db.Column(db.Numeric(7, 4))
     fixed = db.Column(db.Numeric(18, 4), nullable=False, default=0)
     status = db.Column(db.String(16), nullable=False, default="draft", index=True)
     search_text = db.Column(db.Text, nullable=False, default="")
@@ -124,6 +125,7 @@ class Product(Base):
     media = db.relationship("Media", lazy="selectin", order_by="Media.created_at")
     __table_args__ = (
         CheckConstraint("metal IN ('Gold','Silver','Other')"),
+        CheckConstraint("making_percentage BETWEEN 0 AND 100", name="ck_product_making_percentage"),
         CheckConstraint("weight > 0 AND purity > 0 AND purity <= 1 AND making >= 0 AND fixed >= 0"),
         CheckConstraint("status IN ('draft','published','archived','suspended','excess')"),
         Index("ix_product_catalogue", "status", "metal", "category_id", "created_at"),
@@ -155,6 +157,13 @@ class Media(Base):
         CheckConstraint("kind IN ('image','reel','document','payment')"),
         CheckConstraint("status IN ('queued','processing','ready','failed','suspended','excess')"),
     )
+
+
+class ReelView(db.Model):
+    store_id = db.Column(db.Uuid, db.ForeignKey("store.id", ondelete="CASCADE"), primary_key=True)
+    week = db.Column(db.Date, primary_key=True)
+    media_id = db.Column(db.Uuid, db.ForeignKey("media.id", ondelete="CASCADE"), primary_key=True)
+    viewer_id = db.Column(db.Uuid, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True)
 
 
 class Job(Base):

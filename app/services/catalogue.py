@@ -15,7 +15,10 @@ def price_expression():
         func.round(
             func.coalesce(Rate.value, 0) * Product.purity * Product.weight
             + case((Product.metal == "Other", 0), (Product.metal == "Silver", Store.silver_surplus), else_=Store.surplus) * Product.weight
-            + Product.making
+            + func.coalesce(
+                func.coalesce(Rate.value, 0) * Product.weight * Product.making_percentage / 100,
+                Product.making,
+            )
             + Product.fixed,
             2,
         ),

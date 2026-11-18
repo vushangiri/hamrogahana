@@ -27,6 +27,7 @@ def create_app(config=None):
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.getenv("COOKIE_SECURE", "1") == "1",
         PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+        REEL_VIEWS_PER_BONUS_HOUR=max(0, int(os.getenv("REEL_VIEWS_PER_BONUS_HOUR", "0"))),
         WTF_CSRF_TIME_LIMIT=12 * 60 * 60,
         GEOCODER_URL=os.getenv("GEOCODER_URL", "https://nominatim.openstreetmap.org/search"),
         GEOCODER_AGENT=os.getenv("GEOCODER_AGENT", ""),
@@ -80,6 +81,9 @@ def create_app(config=None):
     def unit_rate(value):
         from .services.units import unit_rate as convert
         return convert(value)
+
+    from .services.units import display_decimal
+    app.add_template_filter(display_decimal)
 
     @app.template_filter("unit_weight")
     def unit_weight(value):

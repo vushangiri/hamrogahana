@@ -27,6 +27,10 @@ def unit_rate(value):
 
 def unit_weight(value):
     converted = value / unit_context()["display_unit"].grams
-    if 0 < converted < Decimal(".000001"):
-        return "<0.000001"
-    return format(converted.quantize(Decimal(".000001")).normalize(), "f")
+    return display_decimal(converted)
+
+
+def display_decimal(value):
+    if 0 < value < Decimal(".005"):
+        return "<0.01"
+    return format(Decimal(value).quantize(Decimal(".01")).normalize(), "f")

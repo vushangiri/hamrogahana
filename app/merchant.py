@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from .extensions import db
-from .models import Category, Feature, Media, Plan, Product, Store, Tag, Upgrade
+from .models import Category, Feature, Media, Plan, Product, Store, Tag, Upgrade, now
 from .security import once
 from .services.core import (
     NEPAL,
@@ -20,6 +20,9 @@ from .services.core import (
     locked_store,
     owner_product,
     phone,
+    reel_bonus_enabled,
+    reel_bonus_hours,
+    reel_week,
     schedule,
     text,
 )
@@ -74,6 +77,8 @@ def dashboard():
         features=features[:10],
         feature_more=len(features) > 10,
         feature_page=feature_page,
+        reel_bonus_enabled=tab == "Featured" and reel_bonus_enabled(s),
+        reel_bonus=reel_bonus_hours(s, reel_week(now())) if tab == "Featured" else 0,
         upgrades=db.session.scalars(
             select(Upgrade)
             .where(Upgrade.store_id == s.id)
@@ -121,22 +126,36 @@ def edit_product(pid=None):
             "Gold": {"24K": Decimal(1), "22K": Decimal(22) / 24, "18K": Decimal(".75")},
             "Silver": {"999": Decimal(".999"), "925": Decimal(".925")},
         }
-        if metal != "Other" and (metal not in allowed or purity_code not in allowed[metal]):
+        if metal != "Other" and (metal not in allowed or (purity_code != "custom" and purity_code not in allowed[metal])):
             raise ValueError("Choose a valid metal and purity combination")
         p.metal = metal
         if metal == "Other":
             p.description = text(request.form.get("description"), 5000)
             p.weight_unit = "gram"
             p.purity, p.weight, p.making = Decimal(1), Decimal(1), Decimal(0)
+            p.making_percentage = None
             p.fixed = decimal(request.form.get("fixed"), places=4)
         else:
-            p.purity = allowed[metal][purity_code].quantize(Decimal(".0000000001"))
+            if purity_code == "custom":
+                p.purity = decimal(request.form.get("custom_purity"), ".00000001", "100", 8) / 100
+                purity_code = f"{(p.purity * 100).normalize():f}%"
+            else:
+                p.purity = allowed[metal][purity_code].quantize(Decimal(".0000000001"))
             unit = request.form.get("weight_unit", "gram")
             if unit not in ("gram", "tola"):
                 raise ValueError("Choose Gram or Tola")
             p.weight_unit = unit
             p.weight = (decimal(request.form.get("weight"), ".000001", "100000", 6) * (TOLA_GRAMS if unit == "tola" else 1)).quantize(Decimal(".000001"))
-            p.making = decimal(request.form.get("making"), places=4)
+            percentage = request.form.get("making_percentage")
+            if percentage:
+                p.making_percentage = decimal(percentage, "0", "100", 4)
+                p.making = Decimal(0)
+            elif "making" in request.form:
+                # An older form can still submit its original NPR field.
+                p.making = decimal(request.form["making"], places=4)
+                p.making_percentage = None
+            elif not pid or p.making_percentage is not None:
+                raise ValueError("Enter a making percentage")
             p.fixed = decimal(request.form.get("fixed"), places=4)
         names = sorted(
             {text(x, 60).lower() for x in request.form.get("tags", "").split(",") if x.strip()}

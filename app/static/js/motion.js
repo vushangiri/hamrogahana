@@ -4,20 +4,18 @@
   const root = document.documentElement;
   const status = document.getElementById('navigationStatus');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  let progressTimer, skeletonTimer, recoveryTimer;
+  let skeletonTimer, recoveryTimer;
   function finishNavigation() {
-    clearTimeout(progressTimer); clearTimeout(skeletonTimer); clearTimeout(recoveryTimer);
+    clearTimeout(skeletonTimer); clearTimeout(recoveryTimer);
     root.classList.remove('is-navigating', 'navigation-slow');
     document.getElementById('main')?.removeAttribute('aria-busy');
     if (status) status.textContent = '';
   }
   function startNavigation() {
     finishNavigation();
-    progressTimer = setTimeout(() => {
-      root.classList.add('is-navigating');
-      document.getElementById('main')?.setAttribute('aria-busy', 'true');
-      if (status) status.textContent = 'Loading page…';
-    }, 100);
+    root.classList.add('is-navigating');
+    document.getElementById('main')?.setAttribute('aria-busy', 'true');
+    if (status) status.textContent = 'Loading page…';
     skeletonTimer = setTimeout(() => root.classList.add('navigation-slow'), 650);
     recoveryTimer = setTimeout(() => {
       finishNavigation();
@@ -61,7 +59,7 @@
       if (seen.has(img)) return;
       seen.add(img);
       img.decoding = 'async';
-      const container = img.parentElement;
+      const container = img.closest('.productArt') || img.parentElement;
       function complete() {
         container.classList.remove('media-pending');
         if (!img.naturalWidth) {

@@ -25,11 +25,35 @@ $('#applyLocation')?.addEventListener('click',()=>{const lat=Number($('#latitude
 const storesMap=$('#storesMap');if(storesMap){const markers=$$('.storeMarker');const m=map(storesMap,Number(markers[0]?.dataset.lat||loc?.lat||27.704),Number(markers[0]?.dataset.lon||loc?.lon||85.311),storesMap.dataset.tileUrl);if(m){markers.forEach(el=>{const marker=L.marker([Number(el.dataset.lat),Number(el.dataset.lon)]).addTo(m);const popup=document.createElement('div');popup.textContent=el.querySelector('strong')?.textContent||el.textContent;marker.bindPopup(popup)});if(markers.length>1)m.fitBounds(markers.map(el=>[Number(el.dataset.lat),Number(el.dataset.lon)]),{padding:[25,25]})}}
 document.addEventListener('submit',e=>{const form=e.target.closest('form[data-upload]');if(!form)return;e.preventDefault();const xhr=new XMLHttpRequest(),progress=$('progress',form),button=$('button[type=submit],button.btn',form),status=$('.uploadStatus',form);button.disabled=true;progress.classList.remove('hidden');xhr.open('POST',form.action);xhr.upload.addEventListener('progress',event=>{if(event.lengthComputable){progress.value=event.loaded/event.total*100;status.textContent=Math.round(progress.value)+'% uploaded'}});xhr.addEventListener('load',()=>{if(xhr.status>=200&&xhr.status<300){document.dispatchEvent(new Event('hg:navigate'));location.href='/merchant?tab=Products'}else{button.disabled=false;const page=new DOMParser().parseFromString(xhr.responseText,'text/html');status.textContent=page.querySelector('[role=alert]')?.textContent||'Upload failed. Check the file and try again.'}});xhr.addEventListener('error',()=>{button.disabled=false;status.textContent='Connection lost. Check upload status before retrying.'});xhr.send(new FormData(form))});
 const reelObserved = new WeakSet();
+function trackReelView(video) {
+  if (!video.dataset.reelView) return;
+  let watched = 0, previous = 0, submitted = false;
+  video.addEventListener('seeking', () => { previous = video.currentTime; });
+  video.addEventListener('timeupdate', async () => {
+    const elapsed = video.currentTime - previous;
+    previous = video.currentTime;
+    if (submitted || document.hidden || video.paused || video.seeking || elapsed <= 0 || elapsed > 1) return;
+    watched += elapsed;
+    if (watched < 3) return;
+    submitted = true;
+    try {
+      const response = await fetch(video.dataset.reelView, {
+        method: 'POST',
+        headers: {'X-CSRFToken': $('meta[name="csrf-token"]').content},
+      });
+      if (!response.ok) throw new Error('View could not be recorded');
+    } catch {
+      watched = 0;
+      submitted = false;
+    }
+  });
+}
 function initReels(){
   const videos = $$('video[data-src]');
   if (!('IntersectionObserver' in window)) return;
   videos.filter(v => !reelObserved.has(v)).forEach(v => {
     reelObserved.add(v);
+    trackReelView(v);
     const observer = new IntersectionObserver(entries => entries.forEach(entry => {
       if(entry.intersectionRatio > .65 && !document.hidden){
         if(!v.src){v.src=v.dataset.src;v.load()}
@@ -145,7 +169,7 @@ function reconcileSaved(){savedButtons();if(location.pathname!=='/saved')return;
 document.addEventListener('click',e=>{if(e.target.closest('[data-save]'))reconcileSaved()});window.addEventListener('pageshow',reconcileSaved);window.addEventListener('storage',()=>{reconcileSaved();syncPreferenceLinks()});
 // Warm only a link the visitor points at, focuses, or touches. No background crawl.
 let prefetchTimer;
-function prefetchLink(event){const link=event.target.closest('.bottom a,.subnav a,.productInfo a');if(!link||navigator.connection?.saveData||navigator.connection?.effectiveType?.includes('2g'))return;clearTimeout(prefetchTimer);prefetchTimer=setTimeout(()=>navigator.serviceWorker?.controller?.postMessage({type:'prefetch',url:link.href}),event.type==='touchstart'?0:90)}
+function prefetchLink(event){const link=event.target.closest('.bottom a,.subnav a,.productCard a');if(!link||navigator.connection?.saveData||navigator.connection?.effectiveType?.includes('2g'))return;clearTimeout(prefetchTimer);prefetchTimer=setTimeout(()=>navigator.serviceWorker?.controller?.postMessage({type:'prefetch',url:link.href}),event.type==='touchstart'?0:90)}
 ['pointerover','focusin','touchstart'].forEach(name=>document.addEventListener(name,prefetchLink,{passive:true}));
 document.addEventListener('submit',()=>navigator.serviceWorker?.controller?.postMessage({type:'clear-prefetch'}));
 document.addEventListener('click',event=>{if(event.target.closest('[data-save]'))navigator.serviceWorker?.controller?.postMessage({type:'clear-prefetch'})});

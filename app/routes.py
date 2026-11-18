@@ -30,6 +30,7 @@ from .models import (
     Media,
     Product,
     Rate,
+    ReelView,
     Store,
     Unit,
     User,
@@ -37,7 +38,7 @@ from .models import (
 )
 from .security import throttle
 from .services.catalogue import catalogue, public_conditions
-from .services.core import audit, breakdown, coordinates, decimal, eligible, phone, text
+from .services.core import audit, breakdown, coordinates, decimal, eligible, making_weight, phone, reel_bonus_enabled, reel_week, text
 from .services.media import path_for, upload
 
 web = Blueprint("web", __name__)
@@ -47,7 +48,8 @@ def product_context(p):
     rate = db.session.get(Rate, p.metal)
     return {
         "product": p,
-        "cost": breakdown(rate.value if rate else 0, p.purity, p.weight, p.store.surplus_for(p.metal) if rate else 0, p.making, p.fixed),
+        "making_weight": making_weight(p.weight, p.making_percentage) if p.making_percentage is not None else None,
+        "cost": breakdown(rate.value if rate else 0, p.purity, p.weight, p.store.surplus_for(p.metal) if rate else 0, p.making, p.fixed, p.making_percentage),
         "units": db.session.scalars(select(Unit).where(Unit.active)).all(),
         "rate": rate,
     }
@@ -78,7 +80,7 @@ def discover():
         spotlight.append(
             (
                 p,
-                breakdown(r.value if r else 0, p.purity, p.weight, p.store.surplus_for(p.metal) if r else 0, p.making, p.fixed)["total"],
+                breakdown(r.value if r else 0, p.purity, p.weight, p.store.surplus_for(p.metal) if r else 0, p.making, p.fixed, p.making_percentage)["total"],
                 None,
             )
         )
@@ -170,9 +172,33 @@ def reels():
         .limit(11)
         .offset((page - 1) * 10)
     ).all()
+    tracked = {
+        m.id for m in rows[:10]
+        if current_user.is_authenticated and m.product.store.owner_id != current_user.id
+        and reel_bonus_enabled(m.product.store)
+    }
     return render_template(
-        "reels.html", reels=rows[:10], more=len(rows) > 10, page=page, active="reels"
+        "reels.html", reels=rows[:10], more=len(rows) > 10, page=page, active="reels",
+        tracked=tracked,
     )
+
+
+@web.post("/reels/<uuid:mid>/view")
+def record_reel_view(mid):
+    if not current_app.config["REEL_VIEWS_PER_BONUS_HOUR"] or not current_user.is_authenticated:
+        return "", 204
+    store = db.session.scalar(
+        select(Store).join(Product, Product.store_id == Store.id).join(Media, Media.product_id == Product.id)
+        .where(Media.id == mid, Media.kind == "reel", Media.status == "ready", *public_conditions())
+    )
+    if store and store.owner_id != current_user.id and reel_bonus_enabled(store):
+        db.session.execute(
+            insert(ReelView).values(
+                store_id=store.id, week=reel_week(now()), media_id=mid, viewer_id=current_user.id,
+            ).on_conflict_do_nothing()
+        )
+        db.session.commit()
+    return "", 204
 
 
 @web.get("/location")

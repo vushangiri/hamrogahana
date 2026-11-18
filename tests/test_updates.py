@@ -161,3 +161,84 @@ def test_saved_distances_use_explicit_location_and_do_not_filter_by_radius(datab
     assert '0.0 km' in local
     distant=c.get(path+'&lat=0&lon=0').text
     assert 'Saved location ring' in distant and ' km' in distant
+
+
+def test_custom_purity_and_percentage_making(database):
+    import uuid
+    from app.models import Category, Product
+    from app.services.catalogue import catalogue
+
+    client = database.test_client()
+    login(client, database.config["TEST_OWNER_ID"])
+    category = db.session.scalar(select(Category))
+    data = {
+        "mutation": str(uuid.uuid4()),
+        "category_id": str(category.id),
+        "name": "Custom silver ring",
+        "metal": "Silver",
+        "purity": "custom",
+        "custom_purity": "98.125",
+        "weight": "100",
+        "making_percentage": "10",
+        "fixed": "0",
+    }
+    assert client.post("/merchant/products/new", data=data).status_code == 302
+    product = db.session.scalar(select(Product).where(Product.name == data["name"]))
+    assert product.purity == Decimal(".98125")
+    assert product.making_percentage == 10
+    edit = client.get(f"/merchant/products/{product.id}/edit").text
+    assert 'value="custom" selected' in edit
+    assert 'value="98.12500000"' in edit
+
+    product.status = "published"
+    db.session.commit()
+    rows, _, _ = catalogue({"ids": str(product.id)})
+    assert rows[0][1] == Decimal("10812.50")
+    detail = client.get(f"/products/{product.id}").text
+    assert "Rs. 10,812.50" in detail
+    assert "Making weight (10%)" in detail
+
+
+def test_reel_views_deduplicate_and_credit_following_week(database, monkeypatch):
+    import uuid
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+    from app.models import Category, Media, Product, ReelView
+    from app.services.core import NEPAL, reel_bonus_hours, reel_week
+
+    database.config["REEL_VIEWS_PER_BONUS_HOUR"] = 1
+    last_week = datetime(2026, 11, 11, 12, tzinfo=NEPAL)
+    this_week = last_week + timedelta(days=7)
+    monkeypatch.setattr("app.routes.now", lambda: last_week)
+    monkeypatch.setattr("app.services.core.now", lambda: this_week)
+    store = db.session.get(Store, database.config["TEST_STORE_ID"])
+    category = db.session.scalar(select(Category))
+    product = Product(store_id=store.id, category_id=category.id, name="Reel ring",
+                      metal="Gold", purity=1, weight=1, status="published")
+    db.session.add(product)
+    db.session.flush()
+    media = Media(product_id=product.id, store_id=store.id, kind="reel", status="ready", source="test.mp4")
+    db.session.add(media)
+    db.session.commit()
+    url = f"/reels/{media.id}/view"
+    client = database.test_client()
+    assert client.post(url).status_code == 204
+    login(client, store.owner_id)
+    assert client.post(url).status_code == 204
+    assert db.session.scalar(select(func.count()).select_from(ReelView)) == 0
+    login(client, database.config["TEST_ADMIN_ID"])
+    assert url in client.get("/reels").text
+    assert client.post(url).status_code == 204
+    assert client.post(url).status_code == 204
+    assert db.session.scalar(select(func.count()).select_from(ReelView)) == 1
+    assert reel_bonus_hours(store, reel_week(this_week)) == 1
+    assert reel_bonus_hours(store, reel_week(this_week + timedelta(days=7))) == 0
+    start = this_week + timedelta(hours=1)
+    login(client, store.owner_id)
+    response = client.post("/merchant/featured", data={
+        "mutation": str(uuid.uuid4()),
+        "product_id": str(product.id),
+        "start": start.isoformat(),
+        "end": (start + timedelta(hours=21)).isoformat(),
+    })
+    assert response.status_code == 302

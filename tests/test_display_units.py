@@ -24,7 +24,7 @@ def test_default_and_visitor_unit_conversions(database):
     html=c.get("/").text
     assert "Pure Gold / tola" in html and "116,638.00" in html
     html=c.get(f"/products/{pid}").text
-    assert "0.171471 tola" in html and "15,275.00" in html
+    assert "0.17 tola" in html and "15,275.00" in html
     assert "Pure rate / tola" in html
     assert c.post("/display-unit",data={"unit":"gram","next":f"/products/{pid}"}).status_code==302
     html=c.get(f"/products/{pid}").text

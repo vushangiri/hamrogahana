@@ -3,12 +3,12 @@ from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
-from flask import abort
+from flask import abort, current_app
 from flask_login import current_user
 from sqlalchemy import func, select
 
 from ..extensions import db
-from ..models import Audit, Feature, Media, Plan, Product, Store, now
+from ..models import Audit, Feature, Media, Plan, Product, ReelView, Store, now
 
 NEPAL = ZoneInfo("Asia/Kathmandu")
 
@@ -29,7 +29,13 @@ def money(value):
     return Decimal(value).quantize(Decimal(".01"), rounding=ROUND_HALF_UP)
 
 
-def breakdown(rate, purity, weight, surplus, making, fixed):
+def making_weight(weight, percentage):
+    return weight * percentage / 100
+
+
+def breakdown(rate, purity, weight, surplus, making, fixed, making_percentage=None):
+    if making_percentage is not None:
+        making = making_weight(weight, making_percentage) * rate
     metal = rate * purity * weight
     extra = surplus * weight
     return {
@@ -156,6 +162,26 @@ def week_slices(start, end):
         cursor = stop
 
 
+def reel_bonus_enabled(store):
+    return store.plan_name in ("Standard", "Premium") and current_app.config["REEL_VIEWS_PER_BONUS_HOUR"] > 0
+
+
+def reel_week(when):
+    day = when.astimezone(NEPAL).date()
+    return day - timedelta(days=day.weekday())
+
+
+def reel_bonus_hours(store, week):
+    if not reel_bonus_enabled(store) or week != reel_week(now()):
+        return 0
+    views = db.session.scalar(
+        select(func.count()).select_from(ReelView).where(
+            ReelView.store_id == store.id, ReelView.week == week - timedelta(days=7)
+        )
+    )
+    return min(3, views // current_app.config["REEL_VIEWS_PER_BONUS_HOUR"])
+
+
 def schedule(store, product, start, end):
     # Serialize all capacity decisions, then lock the store. All callers use this order.
     db.session.execute(select(func.pg_advisory_xact_lock(604217)))
@@ -190,7 +216,7 @@ def schedule(store, product, start, end):
             ),
             Decimal(0),
         )
-        if used + hours > limit:
+        if used + hours > limit + reel_bonus_hours(store, monday.date()):
             raise ValueError("Weekly featured allowance exceeded")
     overlaps = db.session.scalars(
         select(Feature).where(
