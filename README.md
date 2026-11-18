@@ -167,6 +167,6 @@ docker compose up -d --force-recreate app worker rates nginx
 docker compose ps
 ```
 
-Refresh the browser or installed app. In **Merchant → Products**, choose a standard purity or **Custom percentage** for gold and silver. Enter a making percentage from 0 to 100. For example, 10% on 100 g adds 10 g of making weight, priced at the current metal rate per gram. Existing NPR making charges stay in place until you enter a percentage.
+Refresh the browser or installed app. In **Merchant → Products**, choose a standard purity or **Custom percentage** for gold and silver. Making percentage is optional. Leave it blank to apply no percentage, or enter a value from 0 to 100. The app prices the resulting making weight at the current metal rate per gram. Existing NPR making charges stay in place until you enter a percentage.
 
 To enable reel bonuses, set `REEL_VIEWS_PER_BONUS_HOUR` in `.env` before recreating the app. The default is `0` (disabled). Each signed-in account can count once per reel per Nepal calendar week after watching three seconds in the Reels feed. Store owners’ own views are excluded. Every full threshold earns one extra featured hour for the following week on Standard and Premium, up to three extra hours. The bonus appears in **Merchant → Featured** when that week begins and can be booked during that week.

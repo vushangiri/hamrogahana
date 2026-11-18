@@ -146,16 +146,17 @@ def edit_product(pid=None):
                 raise ValueError("Choose Gram or Tola")
             p.weight_unit = unit
             p.weight = (decimal(request.form.get("weight"), ".000001", "100000", 6) * (TOLA_GRAMS if unit == "tola" else 1)).quantize(Decimal(".000001"))
-            percentage = request.form.get("making_percentage")
+            percentage = request.form.get("making_percentage", "").strip()
             if percentage:
                 p.making_percentage = decimal(percentage, "0", "100", 4)
                 p.making = Decimal(0)
-            elif "making" in request.form:
+            elif "making_percentage" not in request.form and "making" in request.form:
                 # An older form can still submit its original NPR field.
                 p.making = decimal(request.form["making"], places=4)
                 p.making_percentage = None
             elif not pid or p.making_percentage is not None:
-                raise ValueError("Enter a making percentage")
+                p.making_percentage = None
+                p.making = Decimal(0)
             p.fixed = decimal(request.form.get("fixed"), places=4)
         names = sorted(
             {text(x, 60).lower() for x in request.form.get("tags", "").split(",") if x.strip()}

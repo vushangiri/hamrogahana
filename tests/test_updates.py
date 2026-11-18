@@ -182,6 +182,10 @@ def test_custom_purity_and_percentage_making(database):
         "making_percentage": "10",
         "fixed": "0",
     }
+    blank = dict(data, mutation=str(uuid.uuid4()), name="Silver ring without making", making_percentage="")
+    assert client.post("/merchant/products/new", data=blank).status_code == 302
+    no_making = db.session.scalar(select(Product).where(Product.name == blank["name"]))
+    assert no_making.making_percentage is None and no_making.making == 0
     assert client.post("/merchant/products/new", data=data).status_code == 302
     product = db.session.scalar(select(Product).where(Product.name == data["name"]))
     assert product.purity == Decimal(".98125")
@@ -197,6 +201,14 @@ def test_custom_purity_and_percentage_making(database):
     detail = client.get(f"/products/{product.id}").text
     assert "Rs. 10,812.50" in detail
     assert "Making weight (10%)" in detail
+
+    blank_edit = dict(data, mutation=str(uuid.uuid4()), making_percentage="")
+    assert client.post(f"/merchant/products/{product.id}/edit", data=blank_edit).status_code == 302
+    db.session.refresh(product)
+    assert product.making_percentage is None and product.making == 0
+    assert "Making weight" not in client.get(f"/products/{product.id}").text
+    rows, _, _ = catalogue({"ids": str(product.id)})
+    assert rows[0][1] == Decimal("9812.50")
 
 
 def test_reel_views_deduplicate_and_credit_following_week(database, monkeypatch):
